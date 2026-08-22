@@ -1798,3 +1798,74 @@ Until that lands, the honest statement of our result is unchanged but its scope 
 now explicit: **we have bounded the response to solid Earth tides, and the
 component that produced the literature's largest effect is measured at ~39% of the
 solid tide even at an inland site, with a different phase.**
+
+---
+
+## 2026-08-22 — Ocean loading at scale: the null was on an incomplete forcing
+
+Ocean loading strain computed at **all 18,316 GCMT sites** (Mw ≥ 5.5), M2 and O1,
+via SPOTL with GOT4.7. A single `nloadf` call is ~25 ms, so direct evaluation beat
+a HEALPix precompute — and avoided interpolating a field that varies sharply across
+coastlines.
+
+### The numbers
+
+| | median | 90th pct | max |
+|---|---|---|---|
+| **M2 ocean loading** | **9.23** | **17.90** | **66.3** |
+| O1 ocean loading | 2.10 | 5.88 | 24.0 |
+| *M2 solid Earth tide, for comparison* | *9.92* | | |
+
+Nanostrain.
+
+**The median ocean loading is 93% of the solid Earth tide. For the top decile of
+sites it is 1.8× the solid tide, reaching 6.7× at the extreme.**
+
+This is not a correction term. For a large fraction of the catalogue it is
+comparable to or larger than the component we modelled — and it carries a
+**site-dependent phase**.
+
+### What this does to P3.4, P3.5 and P3.2
+
+All three tested whether events align with **solid-tide** phase. If the driver is
+total tide, and the omitted term is of comparable magnitude with a phase that
+varies site to site, then pooling globally against solid-tide phase averages the
+signal away **by construction**.
+
+So the correct statement of our result is not what we have been saying:
+
+> ~~Ordinary crust shows no detectable tidal response below ~3.9%.~~
+>
+> **Ordinary crust shows no detectable response to the *solid Earth tide* below
+> ~3.9%. The ocean loading term, comparable in magnitude and differing in phase,
+> was not included in that test.**
+
+Three independent methods agreeing does not help here: they shared the same
+incomplete forcing. **Agreement between methods is not agreement about physics
+when the methods share an input.** That is worth recording as its own lesson —
+it is the seventh entry in the trap list in spirit, arriving through a shared
+feature rather than a shared statistic.
+
+### Also explains the literature
+
+Cochran et al.'s factor-3 result came from shallow thrust faults in subduction
+zones. Those are exactly the sites in our upper decile, where loading is ~2× the
+solid tide. A solid-tide-only analysis would find nothing there, and did.
+
+### Remaining work
+
+The data exists; the integration does not. What is needed:
+
+1. Loading strain at event time from the per-site `(amplitude, phase)` pairs and
+   the analytic Doodson argument — `ph_core::doodson` already supplies the
+   argument, including the longitude correction.
+2. Strain → stress under the free-surface condition (plane stress, `σ_zz ≈ 0`),
+   giving the horizontal tensor.
+3. Add to the solid-tide tensor, resolve on each event's GCMT plane, re-run the
+   ΔCFS sign test.
+
+⚠ **One convention must be verified before trusting the result.** SPOTL reports
+"phases are local, lags negative". A sign error there flips the ΔCFS sign for every
+event and would invert the answer. Validate against SPOTL's own `hartid` time
+series at one site, or run both sign conventions as a stated robustness check — the
+same treatment the nodal-plane ambiguity already gets.
