@@ -2233,3 +2233,64 @@ the lags being measured here.
 - Two assumptions are now load-bearing and unvalidated: **Cascadia's fault
   geometry**, and **cross-constituent phase calibration**. Both should be fixed
   before the site comparison is used for anything.
+
+---
+
+## 2026-08-22 — The band prediction is untestable with these catalogues
+
+The real test, finally run: R(ω) from M2 (0.52 d) to Ssa (183 d) with **total tide**
+— solid plus ocean loading at all seven constituents, at both sites, with long-period
+values reported as **upper bounds** since they are not significant.
+
+### Result: unconstrained
+
+| Site / geometry | R(M2) | long-period bound | ratio |
+|---|---|---|---|
+| Parkfield, SAF 137/90/180 | 4.45e-4 | 3.17e-3 | **7×** |
+| Cascadia, 350/12/90 | 2.33e-4 | 4.24e-2 | **182×** |
+| Cascadia, 353/18/90 | 2.60e-4 | 2.24e-2 | **86×** |
+| Cascadia, 000/25/90 | 3.05e-4 | 1.42e-2 | **47×** |
+
+**The long-period bound exceeds R(M2) by one to two orders of magnitude
+everywhere.** The band prediction is neither refuted nor confirmed — the data does
+not constrain it.
+
+The cause is plain in the forcing column: long-period forcing is **8–72 Pa** against
+**400–680 Pa** at M2, and no long-period constituent is significant at either site.
+Weak forcing plus no detection makes a loose bound, and no amount of reanalysis
+fixes that.
+
+### Two things worth keeping
+
+**1. Geometry sensitivity is real but does not change the verdict.** Across three
+Cascadia orientations R(M2) spans 2.33e-4 to 3.05e-4 — a 31% spread — and the bound
+ratio spans 47× to 182×. **The absolute values depend on geometry; the conclusion
+does not.** The invented-plane worry from the previous entry is therefore not
+load-bearing *for this question*, though it remains so for the lag comparison.
+
+**2. R(M2) agrees across sites to within a factor of two.** Parkfield 4.45e-4 against
+Cascadia 2.33–3.05e-4, at sites differing in tectonic setting, fault geometry,
+detection method and forcing amplitude (544 Pa vs 680 Pa). That is the cross-site
+amplitude-law check (roster H3), and it passes: **R behaves like a property of the
+physics rather than a property of the site.**
+
+### What would be needed
+
+Not more analysis. Either **substantially more events** — the long-period bounds
+scale as 1/√N — or a setting with **stronger long-period forcing**. Neither is
+available in these catalogues.
+
+### This is the stopping point
+
+Doc 16's decision 4 pre-committed, before any of these results were known, that a
+measured transfer function is publishable whatever shape it has, and that
+pre-commitment exists precisely to prevent slicing onward until something crosses
+p < 0.05.
+
+The ordinary-crust question has now returned null or unconstrained by **five**
+independent routes: raw phase, depth stratification, mechanism-resolved ΔCFS,
+total-tide R(ω), and long-period bounds. The tremor result, by contrast, has
+survived every attack made on it — including one designed to destroy it.
+
+**The honest output is what we have**, and the roster's §F write-up items are now
+the highest-value remaining work.
