@@ -110,3 +110,141 @@ weakness — that nothing here has been checked against anyone else's result.
 
 **If the goal is the original brief instead:** D2, D1, D5. The seismology has
 already produced the hard part of D2.
+
+---
+
+# Expansion — 2026-08-22
+
+More options, and more detail on how the leading ones would actually be done.
+
+---
+
+## §G — Natural experiments
+
+A coherent theme that has never been exploited. Rate-and-state gives
+`T_a = 2π Aσ₀ / τ̇`, so **when stressing rate rises, `T_a` falls and tidal
+sensitivity should rise.** Several settings vary `τ̇` by orders of magnitude *within
+our existing data*.
+
+| # | Item | Effort | The prediction |
+|---|---|---|---|
+| **G1** | **Aftershocks vs background** | M | During an aftershock sequence the fault sits at criticality with elevated `τ̇`. Tidal sensitivity should be **higher in aftershocks than in background events.** Declustering already needed for ETAS; this reuses it. Sharp, cheap, and uses data in hand. |
+| **G2** | **Inside vs outside ETS episodes** | M | Cascadia tremor occurs in episodic tremor-and-slip bursts every ~14 months, during which local stressing rate is enormously elevated. Cleaner separation than G1 — episodes are unambiguous in the catalogue. |
+| **G3** | Injection-induced seismicity | L | Oklahoma, Groningen: **known, recorded stressing history.** Identified in doc 05 §3 and never used. The closest thing to a controlled experiment available. Also a methodological check — if the pipeline attributes injection-driven seismicity to tides, that is a decisive failure caught cheaply. |
+| **G4** | Volcanic / geothermal seismicity | M | High pore pressure, compliant media, expected high sensitivity. Another point on the `Aσ₀` axis. |
+
+**G1 and G2 are the strongest untested predictions in the project** after the band
+prediction, and unlike it they are answerable with data already downloaded.
+
+## §H — Physical consistency checks
+
+Cheap tests that a real effect must pass and an artifact need not. None has been run.
+
+| # | Item | Effort | Why |
+|---|---|---|---|
+| **H1** | **Cross-constituent phase consistency** | S | If triggering is real, preferred phase at M2, N2 and O1 should reflect a *single* physical lag, not three unrelated numbers. Scattered phases would indicate something is wrong. We have all three phases already. |
+| **H2** | **Stress *rate* vs stress amplitude** | S | Rate-and-state says `dΔCFS/dt` matters alongside `ΔCFS`; Weber found rates mattered for some moonquake clusters. We have only ever tested amplitude. A distinct pre-registered alternative, and the CLI already emits `dcfs_dt`. |
+| **H3** | Amplitude law across sites | S | Parkfield shows ε = 21.7%, Cascadia 12.7%. If `R = ε/stress` is a property of the physics, the difference should be explained by the stress amplitudes at each site. A two-point transfer-function check across sites. |
+| **H4** | Perigee–apogee amplitude knob | S | Lunar distance varies 5.5%; tides go as 1/d³, giving **18% amplitude modulation** at 27.55 d with known phase. Designed in doc 08 §13c, never run. |
+| **H5** | 18.61 yr nodal envelope | M | Modulates diurnal amplitudes ±11%, giving a slow envelope no instrumental effect plausibly mimics. Parkfield's 23 years gives only ~1.2 cycles — marginal. Better on a longer catalogue. |
+
+**H1 and H2 are hours of work on data already in memory.**
+
+## §I — A novel application, independent of the triggering question
+
+| # | Item | Effort | Why |
+|---|---|---|---|
+| **I1** | **Tidal ΔCFS as a nodal-plane discriminator** | M | A moment tensor gives two planes and does not say which broke. If tidal triggering is real, **the plane showing stronger ΔCFS preference is more likely the true fault.** Weber et al. did exactly this for moonquakes. For earthquakes it can be *validated*: plenty of events have the plane independently determined from aftershock distributions or surface rupture. |
+
+This is worth flagging separately because it **inverts the problem**. Instead of
+using known geometry to test triggering, it uses triggering to infer geometry — and
+it is falsifiable against ground truth, which the triggering question itself is not.
+It would also be useful to seismology regardless of how the band prediction turns
+out.
+
+---
+
+## How the leading items would actually be done
+
+### A1 — R(ω) with ocean loading
+
+1. Run `ocean-loading-sites.sh` at **Parkfield and Cascadia** for M2, N2, O1, Q1,
+   Mf, Msf, Mm, Ssa, Sa. Two sites, nine constituents — minutes, not the 18,316-site
+   job.
+2. Reconstruct loading strain at event times:
+   `ε(t) = A cos(χ_local(t) + φ_SPOTL + 10.97°)`, verified in
+   `verify_loading_phase.rs`.
+3. Strain → stress under the free surface (`σ_zz ≈ 0`, plane stress with
+   `μ = 30 GPa`, `ν = 0.25`), giving the horizontal tensor.
+4. Add to the solid-tide tensor, resolve on fault geometry.
+5. Per constituent, fit total forcing amplitude by least squares on the analytic
+   argument — the same method already used for solid tide.
+6. `R(ω) = ε(ω) / amplitude_total(ω)`. Compare against the solid-only version.
+
+**The decisive comparison:** if R(ω) was flat with solid tide and *rises* with total
+tide, the band prediction was killed by an artifact of our own making.
+
+### B1 — Reproducing Métivier et al. (2009)
+
+Their result: NEIC, 442,412 events, ~99% confidence, events preferentially at
+**ground uplift** — reduced normal stress. Anomaly larger for smaller and shallower
+events.
+
+1. NEIC is ComCat's source, so the catalogue is already reachable. Match their
+   magnitude and epoch cuts.
+2. Compute solid-tide **normal stress** at each event (not Coulomb — they used the
+   tidal potential's vertical component).
+3. Schuster on the phase, plus our block-shift null for a modern comparison.
+4. Check three things: the **sign** (uplift), the **confidence**, and the reported
+   **depth and magnitude dependence**.
+
+**Why it matters more than another internal test:** it validates the *stress* path
+end to end against someone else's published number. The moonquake test validated
+timing only. Their reported depth dependence is also a second, independent check on
+our P3.5 null, which found no depth dependence.
+
+### A4 — The 10.97° diagnostic
+
+10.97° of M2 is 22.7 minutes. If it is a **constant time offset**, O1 (25.82 h)
+must show `22.7/1549 × 360 = 5.3°`. If it is a **phase convention**, O1 shows ~11°.
+
+The O1 loading data is already computed. One least-squares fit against `hartid`
+output separates them. A time offset would mean a real timing bug somewhere; a
+phase convention is benign.
+
+---
+
+## §J — Library, expanded
+
+| # | Item | Effort | Why |
+|---|---|---|---|
+| **J1** | Doodson generalised to arbitrary body pairs | M | The original "not just base 12" idea. Extend from the six tidal arguments to arbitrary integer combinations of planetary longitudes under the d'Alembert constraint (doc 02). `doodson` already has the machinery; this is the astrology-facing generalisation. |
+| **J2** | Golden reference dataset + regression tests | S | The library has no protection against silent numerical drift. Freeze known-good outputs. |
+| **J3** | Columnar batch benchmarks across the WASM boundary | S | Doc 06 asserts boundary crossings dominate. Never measured. |
+| **J4** | Determinism harness | S | Seeds, kernel versions, commit hashes recorded with every result, so any number can be regenerated exactly. |
+
+---
+
+## Revised recommendation
+
+The roster is now large enough that ordering matters more than completeness.
+
+```
+A4          minutes, diagnostic, unblocks confidence in timing
+ ├─> A2 -> A1 -> A3        the live scientific question
+ ├─> H1, H2                hours; consistency checks that should already exist
+ ├─> G1, G2                strongest untested predictions, data in hand
+ └─> B1                    external validation, independent of everything else
+```
+
+**A4, H1, H2 in one session** — all small, all diagnostic, and H1/H2 could
+independently undermine or strengthen the tremor result before more is built on it.
+
+**Then A1**, because every interpretation currently rests on a control we know is
+compromised.
+
+**Then G1/G2**, because they are the strongest untested predictions we can actually
+answer, and unlike the band prediction they do not need a larger catalogue.
+
+**B1 in parallel**, because it is the only item that checks this work against
+someone else's.
