@@ -83,6 +83,8 @@ name = "eqf-dataset"
 version = "0.1.0"
 dependencies = [
  "eqf-analysis",
+ "planetary-harmonics-core",
+ "rustspice-core",
 ]
 
 [[package]]

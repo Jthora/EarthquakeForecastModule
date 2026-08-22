@@ -7,3 +7,5 @@ repository.workspace = true
 
 [dependencies]
 eqf-analysis = { path = "../eqf-analysis" }
+planetary-harmonics-core = { workspace = true }
+rustspice-core = { workspace = true }
