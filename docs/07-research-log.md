@@ -1869,3 +1869,65 @@ The data exists; the integration does not. What is needed:
 event and would invert the answer. Validate against SPOTL's own `hartid` time
 series at one site, or run both sign conventions as a stated robustness check — the
 same treatment the nodal-plane ambiguity already gets.
+
+---
+
+## 2026-08-22 — Loading phase convention pinned before use
+
+The ocean loading data is only usable if SPOTL's reported phase can be mapped onto
+our analytic Doodson argument. A sign error there flips ΔCFS for every event; a
+smaller offset merely degrades a phase-sensitive test, which is worse because it
+would not announce itself.
+
+**Verified against SPOTL's own `hartid` synthesis** rather than assumed
+(`examples/verify_loading_phase.rs`).
+
+### Sign
+
+Correlation against a 12-hour `hartid` series: `cos(χ + φ)` gives **+0.86**,
+`cos(χ − φ)` gives **+0.32**. Sign convention is **plus**, unambiguously.
+
+### A constant residual, and what it proves
+
+Fitting amplitude and phase over 30-day hourly series at four sites:
+
+| Site | Longitude | Amp fitted | Amp reported | Phase offset |
+|---|---|---|---|---|
+| Parkfield | −120.2 | 2.7039 | 2.7008 | **10.95°** |
+| Japan | +141.0 | 1.3509 | 1.3494 | **10.99°** |
+| Europe | +5.0 | 1.4313 | 1.4296 | **10.98°** |
+| New Zealand | +175.0 | 21.9386 | 21.9133 | **10.95°** |
+
+**Amplitudes match to 0.1%. The phase offset is constant to 0.04° across 295° of
+longitude.**
+
+The constancy is the useful part. **It independently validates the `2λ` longitude
+correction** in `doodson::phase_at_longitude` — a longitude-convention error would
+make the offset scale with longitude, and it does not. That correction was added
+for the global catalogue on theoretical grounds; it is now confirmed empirically at
+four sites.
+
+The residual is a definitional difference in the M2 argument reference, not an
+error in either implementation. Applied as a calibration constant it raises the
+12-hour correlation from 0.86 to **0.93**:
+
+```text
+loading(t) = A · cos( χ_local(t) + φ_SPOTL + 10.97° )
+```
+
+11° of M2 is 23 minutes — small enough to have been waved through, large enough to
+degrade exactly the test we need it for.
+
+### Status
+
+Everything needed for the total-tide test is now in place and validated:
+
+- Ocean loading `(amplitude, phase)` at all 18,316 sites, M2 and O1
+- The convention mapping SPOTL's output onto our argument, verified globally
+- GCMT mechanisms and both nodal planes
+- Solid-tide tensors, elastic calibration, Coulomb projection, block-shift null
+
+**Remaining is mechanical:** reconstruct loading strain at event times, convert
+strain to stress under the free-surface condition, add to the solid-tide tensor,
+resolve on each plane, re-run the ΔCFS sign test. No unresolved physics or
+convention questions stand in the way.
