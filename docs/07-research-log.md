@@ -1931,3 +1931,85 @@ Everything needed for the total-tide test is now in place and validated:
 strain to stress under the free-surface condition, add to the solid-tide tensor,
 resolve on each plane, re-run the ΔCFS sign test. No unresolved physics or
 convention questions stand in the way.
+
+---
+
+## 2026-08-22 — Detection-bias hypothesis tested and refuted
+
+### The threat
+
+Self-critique raised an alternative explanation for the entire tremor result that
+had never been tested. Ocean loading deforms the ground and modulates microseism
+noise; **Custodio et al. (2003, GRL) measured tidal modulation of seismic noise
+with "the main periodicity coinciding with the tidal component M2"** — our exact
+frequency. Detection threshold tracks noise, so detection capability oscillates at
+M2, producing apparent rate modulation with **zero triggering**.
+
+It explained our pattern uncomfortably well: signal in both threshold-limited
+tremor catalogues, nothing in the complete M5.5+ catalogue. It also undermined C5,
+since both sites are threshold-limited — a shared artifact survives every
+difference in tectonics, geography and epoch that made the "replication" look
+convincing.
+
+A Cascadia tremor thesis (Klaus 2012) independently flags detection-threshold
+modulation as a known bias in exactly these catalogues.
+
+### Pre-registered test
+
+Stratify by detection strength. Detection bias **requires** modulation to vanish
+for events far above threshold; real triggering does not.
+
+### Result — the opposite of the artifact prediction
+
+**Parkfield, by `ccsum`** (summed cross-correlation — a detection-strength metric,
+not a size metric):
+
+| Stratum | Events | ccsum | M2 ε |
+|---|---|---|---|
+| 1 weakest | 305,623 | 4.33 | 22.81% |
+| 5 strongest | 305,625 | 8.93 | 19.96% |
+
+**Ratio 0.87 — essentially flat.** Detection bias predicts a collapse toward zero.
+It does not happen.
+
+**Cascadia, by magnitude:**
+
+| Stratum | Events | Mag | M2 ε |
+|---|---|---|---|
+| 1 | 79,607 | 0.71 | 3.74% |
+| 3 | 79,607 | 1.06 | 7.35% |
+| 5 | 79,608 | 1.52 | **37.29%** |
+
+**Ratio 9.98 — modulation rises tenfold with event size.** The artifact hypothesis
+requires the exact opposite.
+
+### And it independently reproduces a published result
+
+The magnitude dependence is not just a refutation. **Ide, Yabe & Tanaka (2016,
+*Nature Geoscience*) report that tides modulate the earthquake size distribution —
+larger events show stronger tidal influence.** We reproduced that from a different
+catalogue, with different machinery, while trying to disprove ourselves.
+
+That is the first time this project has independently recovered a published
+finding it was not aiming at, and it is worth more than the six unit-test suites.
+
+### Caveats
+
+1. **The `num_stas` stratification is contaminated.** Strata 1–2 have `num_stas =
+   0` — missing metadata, not weak detection — so that split is partly by data
+   epoch. The magnitude and `ccsum` results are clean; the `num_stas` one should
+   not be quoted.
+2. **Parkfield's mild decline (0.87) is not nothing.** It is consistent with a
+   small detection effect riding on top of real triggering. Worth bounding rather
+   than dismissing.
+3. `ccsum` and magnitude are different axes — detection strength versus event size.
+   Parkfield tests the artifact directly; Cascadia tests size dependence. They are
+   complementary, not a replication of each other.
+
+### What changes
+
+- **C5's replication claim is repaired**, not by argument but by test: the shared
+  threshold-limitation that would have explained both sites is ruled out.
+- The tremor positives stand.
+- The critique's most dangerous point is closed. The remaining ones — uncalibrated
+  null, solid-tide-only R(ω), single-reviewer verification — are not.

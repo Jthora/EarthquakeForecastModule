@@ -59,6 +59,10 @@ pub struct Tremor {
     pub lat_deg: f64,
     pub lon_deg: f64,
     pub depth_km: f64,
+    /// Reported magnitude, where present.
+    pub magnitude: f64,
+    /// Number of stations contributing — a detection-quality proxy.
+    pub num_stas: f64,
 }
 
 /// Parse `"Thu, 06 Aug 2009 00:00:00 GMT"` to days since 2000-01-01.
@@ -119,11 +123,18 @@ pub fn parse_catalog(csv: &str) -> Vec<Tremor> {
         ) else {
             continue;
         };
+        let g = |i: Option<usize>| -> f64 {
+            i.and_then(|k| f.get(k.saturating_sub(1)))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(f64::NAN)
+        };
         out.push(Tremor {
             day,
             lat_deg: lat,
             lon_deg: lon,
             depth_km: f.get(cd - 1).and_then(|v| v.parse().ok()).unwrap_or(f64::NAN),
+            magnitude: g(col("magnitude")),
+            num_stas: g(col("num_stas")),
         });
     }
     out
@@ -195,6 +206,16 @@ mod tests {
         assert!((t[0].lat_deg - 46.63).abs() < 1e-9);
         assert!((t[0].lon_deg + 122.41).abs() < 1e-9);
         assert!((t[0].depth_km - 60.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn retains_detection_quality_fields() {
+        let t = parse_catalog(SAMPLE);
+        // Row 2 carries magnitude 1.0 and num_stas 7.
+        assert!((t[1].magnitude - 1.0).abs() < 1e-9, "{}", t[1].magnitude);
+        assert!((t[1].num_stas - 7.0).abs() < 1e-9, "{}", t[1].num_stas);
+        // Row 1 has blank magnitude -> NaN, not a silent zero.
+        assert!(t[0].magnitude.is_nan());
     }
 
     #[test]
