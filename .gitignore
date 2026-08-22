@@ -1,0 +1,14 @@
+# Data — catalogues and models are downloaded, not versioned
+/data/
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+
+# Rust
+/target/
+
+# macOS
+.DS_Store

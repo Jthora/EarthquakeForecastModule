@@ -1,0 +1,3 @@
+[submodule "modules/PlanetaryHarmonicsModule"]
+	path = modules/PlanetaryHarmonicsModule
+	url = https://github.com/Jthora/PlanetaryHarmonicsModule.git
