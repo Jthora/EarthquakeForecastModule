@@ -2157,3 +2157,79 @@ rotation-invariant — so testing "rate versus amplitude" **by power is vacuous*
 The distinction lives entirely in the phase, which H1 measures. Semidiurnal lag
 ≈ −9° is amplitude-driven; diurnal ≈ +123° is neither cleanly amplitude- nor
 rate-driven, which is itself part of the puzzle above.
+
+---
+
+## 2026-08-22 — A1: the prediction fails, and exposes a weaker assumption
+
+H1's prediction, fixed in advance: *if omitting ocean loading causes the 132.6°
+band split, adding it should bring the bands together.*
+
+### It does not
+
+| Site | Band difference, solid | with total tide |
+|---|---|---|
+| Parkfield | +132.6° | **+136.9°** |
+| Cascadia | −178.9° | **+172.2°** (≡ −187.8°, i.e. ~9° change) |
+
+**Loading is not the explanation.** Reading 2 from H1 is refuted; the
+frequency-dependent phase response survives as the remaining candidate.
+
+Clean negative, and worth more than a confirmation would have been — the
+prediction was falsifiable and it falsified.
+
+### But loading does matter, in a way I predicted backwards
+
+Forcing amplitudes at Parkfield:
+
+| Band | Solid (Pa) | Total (Pa) | Change |
+|---|---|---|---|
+| M2 | 679.4 | **487.4** | **−28%** |
+| N2 | 129.7 | 98.2 | −24% |
+| O1 | 136.7 | **171.8** | **+26%** |
+| Q1 | 26.1 | 31.2 | +20% |
+
+Loading interferes **destructively** with the solid tide in the semidiurnal band
+and **constructively** in the diurnal band. That is a substantial, band-dependent
+correction to the forcing — the amplitudes were materially wrong before.
+
+**And it moves R(ω) the opposite way to my roster prediction.** I argued loading is
+large at short periods and negligible at long, so correcting it would *lower* R at
+short periods and turn flat into rising. Between M2 and O1 the correction runs the
+other way: R(M2) rises ~39%, R(O1) falls ~21%, and the O1/M2 ratio drops from 3.3
+to **1.9** — R(ω) becomes *flatter*, not steeper.
+
+That reasoning was about long versus short period. M2 and O1 are both short, and it
+did not transfer. **The band prediction remains untested**, and testing it needs
+long-period loading (Mf, Mm, Ssa, Sa), which GOT4.7 may not supply.
+
+### The weaker assumption this exposed
+
+The two sites disagree about the band structure — Parkfield has semidiurnal ≈ 0°
+and diurnal ≈ +130°; Cascadia has semidiurnal ≈ +160° and diurnal ≈ −19°, roughly
+the opposite assignment.
+
+Lag is measured *relative to ΔCFS*, so fault geometry should divide out. That it
+does not points at the geometry itself — and **Cascadia's plane (350/12/90) is
+invented.** I chose it as a "generic megathrust" with no source. Parkfield's
+137/90/180 is from the literature.
+
+**A site disagreement built on an assumed fault plane is not evidence of anything.**
+Before this comparison means anything, Cascadia needs a real geometry — from the
+Slab2 model, or from published tremor-zone orientations.
+
+### Also assumed, and stated rather than buried
+
+The 10.97° loading calibration is **verified for M2 only** (A4). Applying it to N2,
+O1 and Q1 is an assumption, and a wrong per-constituent offset would move exactly
+the lags being measured here.
+
+### Status
+
+- Circular reasoning retired: R(ω) has now been computed with the forcing term it
+  was missing. The flat-R(ω) claim survives between M2 and O1, and is *more* flat
+  once corrected.
+- H1's loading explanation is refuted.
+- Two assumptions are now load-bearing and unvalidated: **Cascadia's fault
+  geometry**, and **cross-constituent phase calibration**. Both should be fixed
+  before the site comparison is used for anything.
