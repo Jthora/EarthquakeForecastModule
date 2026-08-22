@@ -1,0 +1,15 @@
+[package]
+name = "eqf-analysis"
+description = "Seismic catalogue ingestion and tidal response measurement"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "eqf"
+path = "src/lib.rs"
+
+[dependencies]
+planetary-harmonics-core.workspace = true
+rustspice-core.workspace = true

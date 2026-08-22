@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/eqf-analysis"]
+# PlanetaryHarmonicsModule is a submodule with its own workspace root. Without
+# this, Cargo walks up from its crates and tries to inherit workspace deps here.
+exclude = ["modules/PlanetaryHarmonicsModule"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Jthora/EarthquakeForecastModule"
+
+[workspace.dependencies]
+planetary-harmonics-core = { path = "modules/PlanetaryHarmonicsModule/crates/ph-core" }
+rustspice-core = { path = "modules/PlanetaryHarmonicsModule/modules/RustSPICE/crates/rustspice-core" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
