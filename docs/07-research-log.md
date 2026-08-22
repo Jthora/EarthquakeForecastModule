@@ -2013,3 +2013,68 @@ finding it was not aiming at, and it is worth more than the six unit-test suites
 - The tremor positives stand.
 - The critique's most dangerous point is closed. The remaining ones — uncalibrated
   null, solid-tide-only R(ω), single-reviewer verification — are not.
+
+---
+
+## 2026-08-22 — The block-shift null, finally calibrated
+
+Overdue. The null was invented for this project, argued for structurally, and then
+relied on for a dozen conclusions **without ever being tested**. Six earlier nulls
+here failed in ways that looked decisive; there was no reason to exempt this one.
+
+### Size — synthetic catalogues with no tidal signal
+
+200 trials, 8,000 events, 20-year span, 100 shifts. Nominal rates 0.01/0.05/0.10.
+
+| Generator | p<0.01 | p<0.05 | p<0.10 | KS (crit 0.096) | |
+|---|---|---|---|---|---|
+| Poisson | 0.010 | 0.070 | 0.110 | 0.053 | uniform |
+| **Hawkes (clustered)** | 0.005 | 0.070 | 0.115 | 0.068 | **uniform** |
+| **Hawkes + diurnal** | 0.000 | 0.040 | 0.085 | 0.073 | **uniform** |
+
+**All three pass Kolmogorov-Smirnov uniformity.** The two that matter:
+
+- **Hawkes** carries heavy Omori-decaying aftershock clustering — the
+  non-independence that defeated trap 2's uniform-time null. The block-shift null
+  handles it.
+- **Hawkes + diurnal** adds a strong 24 h detection modulation. This is the
+  artifact scenario, and the null **correctly declines to call it M2** — it comes
+  out conservative there (0.040), not anti-conservative.
+
+### Power
+
+| Injected ε | Detected (60 trials) |
+|---|---|
+| 0.5% | 4/60 |
+| 1.0% | 1/60 |
+| 2.0% | 16/60 |
+| **5.0%** | **55/60** |
+
+At 8,000 events: ~92% power at 5%, ~27% at 2%, none below 1%.
+
+**This independently validates our reported bounds.** Scaling by √N: at 25,962
+global earthquakes sensitivity improves 1.7×, giving ~92% power near 2.9% — close
+to the <3.88% bound we quoted from the null maximum. At Parkfield's 1.53M events
+it improves 13.8×, giving high power below 0.4%, against an observed 21.7%.
+
+The power curve and the bounds were derived by different routes and agree.
+
+### One honest caveat
+
+The p<0.05 rate is **0.070 for Poisson and Hawkes**, 40% above nominal. With 200
+trials the standard error is 1.5%, so this sits 1.3σ high — within sampling noise,
+but not provably so.
+
+**Consequence:** borderline results near p ≈ 0.05 should be treated as weaker than
+they look. Our load-bearing results sit at the 0.0025–0.005 floor, far from
+borderline, so they are unaffected. The P3.5 depth-stratification nulls (p = 0.14
+to 0.99) are likewise unaffected.
+
+### Status
+
+Critique point 2 closed. The null is unbiased under clustering and does not
+mistake a diurnal artifact for a tidal one.
+
+Remaining open from the critique: **solid-tide-only R(ω)** with its circular
+reasoning, and thin external validation — though the Ide et al. size-dependence
+reproduction is now one genuine instance.
