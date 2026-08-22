@@ -1660,3 +1660,87 @@ That is P3.2, and it is now the highest-value next step.
 - **The band prediction remains untested.** Long-period bounds are 5–8%, far too
   loose to exclude the predicted response.
 - **Reaching 1% needs ~400,000 events.** No partition of 25,962 gets there.
+
+---
+
+## 2026-08-22 — P3.2: mechanism-resolved test. Third null on ordinary crust.
+
+**Code:** `eqf::gcmt`, `examples/gcmt_coulomb_sign.rs`. 26 tests.
+
+### The test mechanisms make possible
+
+P3.4 and P3.5 used raw tidal phase, which is **blind to whether the tide loads or
+unloads each fault** — a tide promoting failure on a thrust in Japan simultaneously
+inhibits it on a normal fault in Greece, and pooled globally those cancel.
+
+GCMT gives 67,263 moment tensors, 18,310 at Mw ≥ 5.5 over 49 years. Resolving ΔCFS
+onto each event's *own* fault plane allows a question raw phase cannot pose:
+
+> **Do earthquakes occur preferentially when ΔCFS on their own fault is positive?**
+
+Under no effect, 50%. This aligns the feature with the physics rather than
+discarding events, so it is not the stratification P3.5 showed makes bounds worse.
+
+### Result
+
+| | ΔCFS > 0 | null median | p | mean ΔCFS | p |
+|---|---|---|---|---|---|
+| **Nodal plane 1** | 49.295% | 49.208% | 0.41 | +53.1 Pa | 0.18 |
+| **Nodal plane 2** | 48.329% | 48.591% | 0.76 | +42.5 Pa | 0.31 |
+
+**Nothing significant on either plane.**
+
+Worth noting the null medians sit *below* 50% (49.2%, 48.6%). ΔCFS is not
+symmetrically distributed across the global population of fault geometries, so the
+naive binomial 50% would have been the wrong reference — a fourth-trap-shaped error
+the block-shift null caught by construction.
+
+Both nodal planes were run because a moment tensor gives two equally valid planes
+and does not say which broke. Neither shows an effect; the ambiguity is not hiding
+one.
+
+### Three independent methods, three nulls
+
+| Test | Approach | Result |
+|---|---|---|
+| P3.4 | Raw tidal phase, global, longitude-corrected | null; <3.88% at M2 |
+| P3.5 | Depth-stratified (pre-registered prediction) | null; prediction unsupported |
+| **P3.2** | **Mechanism-resolved ΔCFS sign** | **null** |
+
+These are not three slices of one test. They use different features, different
+statistics and different nulls. All three agree.
+
+### What the project can now actually say
+
+**Tidal stress measurably modulates slow seismicity, and we cannot detect it in
+ordinary earthquakes.**
+
+- **Positive, replicated:** M2, N2 and O1 at Parkfield and Cascadia — two sites
+  differing in tectonics, geography, epoch and detection method. Amplitude scales
+  faster than linearly (slope 3.56). The M2 solid Earth tide computes to 595 Pa
+  against an independently inferred `Aσ₀` of 600 Pa.
+- **Bounded null:** ordinary crust below **3.88% at M2** and **4.33% at O1**, where
+  tremor shows 21.7% and 14.5% — at least 3–5× weaker, by three methods.
+- **Untested:** the band prediction. Long-period bounds of 5–8% cannot exclude the
+  predicted response, and reaching 1% needs ~400,000 events against 25,962.
+
+This is consistent with Beeler & Lockner's nucleation argument and with the
+literature's genuinely mixed record — Cochran et al.'s factor-3 result came from
+shallow thrust faults under large *ocean* tidal loading, which our solid-tide
+calculation does not include.
+
+### Stopping position
+
+Per the pre-commitment in doc 16, this is the point to stop rather than keep
+searching. Three methods, one direction. **The publishable output is the bound
+plus the moonquake and two-site tremor validations**, and that was agreed before
+the results were known.
+
+Two things could change it, and neither is a slice:
+
+1. **Ocean tidal loading.** Cochran et al.'s largest effect came from it. Our
+   pipeline models solid Earth tide only. Adding it is real physics, not data
+   selection — and doc 12 deferred it on a band-prediction argument that the flat
+   `R(ω)` measurement has since undermined.
+2. **~400,000 events**, which needs regional catalogues at lower Mc with per-region
+   completeness control.

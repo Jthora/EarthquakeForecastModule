@@ -20,7 +20,7 @@
 //! |---|---|---|
 //! | 1 | [`apollo`] — deep moonquakes | Known answer. Tidal forcing is *dominant*. |
 //! | 2 | [`parkfield`], [`cascadia`] — tremor and LFEs | Strong effect, two independent sites. |
-//! | 3 | [`comcat`] — global earthquakes | **The actual question.** Ordinary crust. |
+//! | 3 | [`comcat`] + [`gcmt`] — global earthquakes with mechanisms | **The actual question.** Ordinary crust. |
 //!
 //! Rungs 1 and 2 are **controls** for rung 3: tremor has a short `T_a`, so its
 //! short-period response is expected and says nothing about ordinary crust.
@@ -31,4 +31,5 @@ pub use rustspice_core;
 pub mod apollo;
 pub mod cascadia;
 pub mod comcat;
+pub mod gcmt;
 pub mod parkfield;
