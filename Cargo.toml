@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/eqf-analysis"]
+members = ["crates/eqf-analysis", "crates/eqf-dataset"]
 # PlanetaryHarmonicsModule is a submodule with its own workspace root. Without
 # this, Cargo walks up from its crates and tries to inherit workspace deps here.
 exclude = ["modules/PlanetaryHarmonicsModule"]
