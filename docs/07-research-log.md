@@ -2294,3 +2294,92 @@ survived every attack made on it — including one designed to destroy it.
 
 **The honest output is what we have**, and the roster's §F write-up items are now
 the highest-value remaining work.
+
+---
+
+## 2026-08-22 — B1: Métivier et al. (2009) reproduced
+
+The deepest remaining criticism was that every check had been my code against my
+code. The moonquake test validated *timing*; the Ide size-dependence was a
+by-product. **Nothing had validated the stress path against a published number.**
+
+### Their claim
+
+Métivier, de Viron, Conrad, Renault, Diament & Patau (2009), *EPSL* 278, 370–375,
+on **442,412 NEIC events**:
+
+> Earthquakes occur slightly more often at the time of **ground uplift** by the
+> Earth tide, when normal stresses are reduced within the lithosphere.
+
+At ~99% confidence.
+
+### Reproduction
+
+Ground uplift tracks the tide-generating potential, and for a degree-2 solid
+harmonic `V ∝ r²`, so `∂²V/∂r² = 2V/R²` — the **Down-Down tensor component is
+proportional to V**, and uplift maximum is `T_DD` maximum. No Love numbers or
+fault geometry needed; the sign is geometry-free.
+
+ComCat M ≥ 4.0 from 1976: **488,214 events over 49 years**, close to their count.
+
+```text
+events with T_DD > 0 (uplift):  51.2761%
+null median:                    51.0340%
+null max:                       51.3031%
+p = 0.0050
+```
+
+**Same sign, significant. REPRODUCED.**
+
+### Read it honestly
+
+The excess over the null median is **0.24 percentage points**, and exactly one of
+400 null trials exceeded the observed value — the result sits at the 99.75th
+percentile, not far beyond it. Small effect, marginally significant, correct sign.
+Which is precisely what Métivier reported: *slightly* more often.
+
+Note also the **null median is 51.03%, not 50%.** Events are not uniformly
+distributed over the globe and `T_DD` is not symmetrically distributed across
+them, so a naive binomial test against 50% would have claimed an effect five times
+larger than the real one. The block-shift null caught that by construction — the
+same shape as trap 4.
+
+### Making it tractable, and the architecture that did it
+
+488k events × 400 trials is ~390M ephemeris calls done naively, and the first
+attempt timed out. But **the tidal tensor depends only on time, not location** —
+the degree-2 field is five numbers globally. Computing tensors once on a 15-minute
+grid (1.7M epochs, 124 MB) and having each event interpolate and rotate to its own
+coordinates turned it into minutes.
+
+That is exactly the spherical-harmonic architecture doc 06 §1 describes, deferred
+twice, finally earning its place.
+
+### Their secondary claims: apparently opposite, but not properly tested
+
+They report the anomaly is larger for **shallower** and **smaller** events. Raw
+fractions by quartile:
+
+| | Q1 | Q2 | Q3 | Q4 |
+|---|---|---|---|---|
+| Depth (shallow → deep) | 46.68% | 50.04% | 53.05% | **55.35%** |
+| Magnitude (small → large) | 50.32% | 51.67% | 51.39% | 51.73% |
+
+Depth runs strongly the **opposite** way to their report — deeper events show more
+uplift preference.
+
+**But this is not a test.** These are raw fractions with no per-quartile null, and
+the pooled null median is already 51.03% rather than 50%. Depth correlates with
+location — deep events concentrate in subduction zones at particular latitudes —
+so the trend may be entirely geometric. Establishing it needs a null per quartile,
+which was not run.
+
+Recorded because it is interesting and because our own P3.5 also found no depth
+dependence, but **not claimed**.
+
+### What this closes
+
+Critique point: *"every verification is my code checking my code."* Now false for
+the stress path. Three external anchors exist: deep moonquake periodicities
+(timing), Ide et al. size dependence (by-product), and Métivier's uplift
+preference (stress path, deliberate).
