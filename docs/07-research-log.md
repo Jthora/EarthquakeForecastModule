@@ -1744,3 +1744,57 @@ Two things could change it, and neither is a slice:
    `R(ω)` measurement has since undermined.
 2. **~400,000 events**, which needs regional catalogues at lower Mc with per-region
    completeness control.
+
+---
+
+## 2026-08-22 — Ocean loading: the gap is real and quantified
+
+**Code:** `scripts/setup-spotl.sh`.
+
+SPOTL (Agnew) built and running — Farrell Green's functions, GOT4.7 global ocean
+tide model, land-sea database. Four modern-Mac obstacles are documented in the
+script: no Fortran compiler, Homebrew gfortran failing to find `libSystem`, K&R C
+in `ispand.c` rejected by clang, and `mapcon f` taking **no filenames** (it reads
+stdin and writes `lndsea.ind`/`lndsea.bit` itself with `status='new'`).
+
+### Parkfield, M2
+
+```text
+ocean loading strain:  3.88 @ 25.2 deg   3.46 @ 145.4 deg   2.70 @ 130.4 deg   (nanostrain)
+solid Earth tide strain:                 9.92                                   (nanostrain)
+```
+
+**Ocean loading is ~39% of the solid tide in amplitude — and its phases differ
+substantially.**
+
+### Why the phase matters more than the amplitude
+
+Amplitude alone would only rescale our bounds. **Phase is what breaks the test.**
+
+Our ordinary-crust null asked whether events cluster in *solid tide* phase. If the
+real driver is total tide = solid + ocean, and ocean loading carries a
+site-dependent phase offset, then pooling globally against solid-tide phase
+**scrambles the signal by construction** — every site contributes at a different
+offset and they average away.
+
+That is a precise mechanism by which three null results could all be wrong
+together, and it is not something more events would fix.
+
+### And Parkfield is the *mild* case
+
+Parkfield sits ~40 km inland. Ocean loading grows sharply toward the coast, and
+Cochran et al.'s factor-3 result came from **shallow thrust faults in subduction
+zones** — coastal, where loading routinely exceeds the solid tide. Our global
+earthquake catalogue is full of exactly those.
+
+### Status
+
+The tooling works and the magnitude is established. **The remaining work is
+running it at scale**, which needs the loading computed per event site — 18,310
+locations. `nloadf` convolves a global model per call, so a HEALPix precompute and
+interpolation (doc 06 §1, doc 13 §2a) is the route rather than 18,310 invocations.
+
+Until that lands, the honest statement of our result is unchanged but its scope is
+now explicit: **we have bounded the response to solid Earth tides, and the
+component that produced the literature's largest effect is measured at ~39% of the
+solid tide even at an inland site, with a different phase.**

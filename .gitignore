@@ -15,3 +15,6 @@ venv/
 
 # Kernels are fetched, not versioned
 /kernels/
+
+# Vendored third-party source
+/vendor/
