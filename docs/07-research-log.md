@@ -2078,3 +2078,82 @@ mistake a diurnal artifact for a tidal one.
 Remaining open from the critique: **solid-tide-only R(ω)** with its circular
 reasoning, and thin external validation — though the Ide et al. size-dependence
 reproduction is now one genuine instance.
+
+---
+
+## 2026-08-22 — A4 inconclusive; H1 finds structure and predicts A1's outcome
+
+### A4 — the 10.97° diagnostic is confounded
+
+Constant phase or constant time? 10.97° of M2 is 22.7 min, so O1 (25.82 h) should
+show **5.3°** if it is a time offset and **~11°** if a phase convention.
+
+**Neither.** O1 fits to 297° offset, and its amplitude comes out 0.785 against
+0.882 reported — an 11% deficit, versus M2's 0.1% match.
+
+The amplitude deficit identifies the cause. **`hartid` automatically infers minor
+constituents from the ones supplied**, and cannot be told not to. In the
+semidiurnal band that is benign because M2 dominates; in the diurnal band K1 is
+comparable to or larger than O1, so the synthesized series is not O1-dominated and
+the fit is against the wrong thing.
+
+**Consequence, and it matters for A1:** our loading calibration is **verified for
+M2 only**. A1 needs loading at many constituents, and the `hartid` route cannot
+validate them. Either find a different validation, or apply the M2 constant to all
+constituents and state that as an assumption.
+
+Doodson coefficients cross-checked incidentally: SPOTL prints O1 as `1-1 0 0 0 0`,
+matching `doodson`'s `[1, -1, 0, 0, 0, 0]` exactly.
+
+### H1 — the lags are structured, and they point at ocean loading
+
+Preferred phase measured **relative to the ΔCFS phase at the site**, per
+constituent:
+
+| Band | Period (h) | Lag |
+|---|---|---|
+| M2 | 12.42 | −21.5° |
+| N2 | 12.66 | +2.7° |
+| O1 | 25.82 | +124.8° |
+| Q1 | 26.87 | +121.6° |
+
+| | mean | sd |
+|---|---|---|
+| **Semidiurnal** | −9.4° | 12.1° |
+| **Diurnal** | **+123.2°** | **1.6°** |
+| Band difference | **+132.6°** | |
+
+**Within-band spread 12.1° against a between-band difference of 132.6°.**
+
+This is structure, not scatter. **O1 and Q1 agree to 1.6°** despite O1 being roughly
+five times larger — random noise cannot do that. It is independent evidence that
+the tremor signal is coherent, arrived at without using significance at all.
+
+### Two readings, and one is already on the critique list
+
+1. **A real frequency-dependent phase response.** Rate-and-state predicts a lag
+   growing as period approaches `T_a`, though 132° is larger than Ader et al.'s
+   0 → −π/4 range.
+2. **A band-dependent error in the ΔCFS reference.** Ocean loading has a different
+   phase relative to solid tide in the diurnal and semidiurnal bands, and **we
+   omitted it.** Our `phase_cfs` is therefore wrong by a band-dependent amount —
+   precisely the shape of the discrepancy observed.
+
+Reading 2 is the parsimonious one, and it was already the open critique item.
+
+### H1 makes A1 a prediction rather than a recomputation
+
+> **If ocean loading is the cause, adding it should bring the two bands' lags
+> together.** If they remain 130° apart, the frequency-dependent response is real.
+
+That is a falsifiable prediction, fixed before A1 runs, and either outcome is
+informative. It also raises A1's value: it now tests the loading correction and the
+physics simultaneously.
+
+### H2 folded in
+
+For a single constituent `dΔCFS/dt` is ΔCFS shifted 90°, and Schuster power is
+rotation-invariant — so testing "rate versus amplitude" **by power is vacuous**.
+The distinction lives entirely in the phase, which H1 measures. Semidiurnal lag
+≈ −9° is amplitude-driven; diurnal ≈ +123° is neither cleanly amplitude- nor
+rate-driven, which is itself part of the puzzle above.
