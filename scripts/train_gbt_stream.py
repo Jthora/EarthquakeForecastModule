@@ -100,6 +100,8 @@ def main():
                          "for each, since only the labels change")
     ap.add_argument("--plant-feature", default="geo.moon.syn.h2.cos")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--thin-km", type=float, default=0.0)
+    ap.add_argument("--thin-days", type=float, default=0.0)
     a = ap.parse_args()
     out = a.out or (a.data + ".gbt.json")
 
@@ -122,6 +124,36 @@ def main():
     usable = (sizes > 1) & ~np.isnan(case_day)
     tr_s = np.flatnonzero(usable & (case_day < TRAIN_END))
     va_s = np.flatnonzero(usable & (case_day >= TRAIN_END) & (case_day < VAL_END))
+
+    # Same thinning as the score scan. Without it the strata are correlated by
+    # residual clustering, and a tree model will happily learn the calendar --
+    # on the unthinned M4 catalogue the marginal scan's top thirty features were
+    # all Neptune-Pluto, whose relative longitude drifts 0.006 deg/day.
+    if a.thin_km > 0 and a.thin_days > 0:
+        lat_all = rows["lat"].astype(np.float64)
+        lon_all = rows["lon"].astype(np.float64)
+        def thin(sel):
+            order = sel[np.argsort(case_day[sel])]
+            aln, alo, ady, acc = [], [], [], []
+            for si in order:
+                t = case_day[si]
+                la, lo_ = lat_all[starts[si]], lon_all[starts[si]]
+                ok = True
+                for j in range(len(ady) - 1, -1, -1):
+                    if t - ady[j] > a.thin_days:
+                        break
+                    dlat = (la - aln[j]) * 111.19
+                    dlon = (lo_ - alo[j]) * 111.19 * np.cos(np.radians(la))
+                    if dlat * dlat + dlon * dlon < a.thin_km ** 2:
+                        ok = False
+                        break
+                if ok:
+                    acc.append(si); aln.append(la); alo.append(lo_); ady.append(t)
+            return np.array(sorted(acc))
+        n0, n1 = len(tr_s), len(va_s)
+        tr_s, va_s = thin(tr_s), thin(va_s)
+        print(f"thinned: train {n0} -> {len(tr_s)}, validate {n1} -> {len(va_s)} "
+              f"(min {a.thin_km:.0f} km, {a.thin_days:.0f} days)")
 
     rng = np.random.default_rng(20260822)
     if len(tr_s) > a.max_strata:
