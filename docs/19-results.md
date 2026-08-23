@@ -220,3 +220,34 @@ Two API behaviours are documented in the fetch scripts because each would silent
 corrupt a catalogue: the PNSN service **caps responses at 20,000 events with HTTP
 200 and no truncation flag**, and returns 404 rather than an empty result for
 windows with no data.
+
+
+---
+
+## Sequel: the astrological programme
+
+The work above tests physically motivated tidal hypotheses. A separate programme
+then tested ~9,800 astrological chart features against the same catalogues, with
+no physical filtering and no requirement that any mechanism be understood.
+
+Results in [23-ml-results.md](23-ml-results.md) and
+[25-stratified-results.md](25-stratified-results.md); pre-registered in
+[21](21-preregistration.md) and [24](24-stratified-preregistration.md).
+
+It found nothing, and the bounds are quantitative: **~4% per standard deviation
+globally, ~6–9% within any focal-mechanism class.** The global bound is
+comparable to the 3.88% M2 bound reached above by five independent physical
+routes, which is a useful check — two entirely different approaches converging on
+the same order of magnitude.
+
+Two findings from that programme bear on the physics work here:
+
+- **The effective sample size of global seismicity is ~10,000 independent events
+  over 49 years, not 488,000.** Windowed declustering removes aftershock
+  sequences but leaves long-range regional correlation; forcing 500 km and 365
+  days of separation is what it takes to calibrate a permutation null. Any study
+  quoting statistics on hundreds of thousands of events is quoting a sample size
+  it does not have.
+- **Annual counts are over-dispersed 2.4× even at M6.0+**, so any analysis
+  comparing across years — including much of the long-period tidal literature —
+  is confounded with the rate history unless it models it.
