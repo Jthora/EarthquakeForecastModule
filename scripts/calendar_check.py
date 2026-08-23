@@ -100,37 +100,44 @@ def main():
         pv = (np.sum(np.abs(arr) >= abs(z)) + 1) / (a.perms + 1)
         print(f"    {k:<44} null sd {arr.std():.3f}   p = {pv:.4f}")
 
-    # Thin to strata that are mutually distant, so residual clustering cannot
-    # correlate them. Greedy: accept a stratum only if no accepted one is within
-    # 500 km and 365 days.
-    print(f"\nthinning to spatially and temporally separated strata...")
+    # How much thinning does it actually take? Discarding 91% of the catalogue is
+    # a large price, so sweep the criterion and find the mildest one that removes
+    # the artefact. z(date) is the readout: it should be consistent with N(0,1),
+    # since the calendar cannot cause earthquakes.
     ks = np.flatnonzero(keep)
     order = np.argsort(cd[ks])
-    acc = []
-    acc_lat, acc_lon, acc_day = [], [], []
-    for si in ks[order]:
-        t = cd[si]
-        la, lo_ = lat[starts[si]], lon[starts[si]]
-        ok = True
-        for j in range(len(acc) - 1, -1, -1):
-            if t - acc_day[j] > 365.0:
-                break
-            dlat = (la - acc_lat[j]) * 111.19
-            dlon = (lo_ - acc_lon[j]) * 111.19 * np.cos(np.radians(la))
-            if dlat * dlat + dlon * dlon < 500.0 ** 2:
-                ok = False
-                break
-        if ok:
-            acc.append(si); acc_lat.append(la); acc_lon.append(lo_); acc_day.append(t)
-    sel = np.zeros(len(sizes), dtype=bool)
-    sel[np.array(acc)] = True
-    print(f"  {sel.sum()} of {keep.sum()} strata survive "
-          f"(min 500 km and 365 days apart)")
-    idx2, st2, sz2, cp2 = subset(sel)
-    d2 = day[idx2]
-    for name, fn in (("date", lambda x: x),
-                     ("Neptune-Pluto proxy", lambda x: np.cos(2 * np.pi * x / 181_000.0))):
-        print(f"  thinned z = {score(fn(d2), st2, sz2, cp2):+8.3f}   {name}")
+    print(f"\n{'km':>6} {'days':>6} {'strata':>8} {'z(date)':>9} {'z(N-P)':>9}"
+          f" {'z(day of month)':>16}")
+    for thin_km, thin_days in ((0, 0), (100, 30), (100, 180), (250, 180),
+                               (250, 365), (500, 365), (1000, 365)):
+        if thin_km == 0:
+            sel = keep.copy()
+        else:
+            acc_lat, acc_lon, acc_day = [], [], []
+            acc = []
+            for si in ks[order]:
+                t = cd[si]
+                la, lo_ = lat[starts[si]], lon[starts[si]]
+                ok = True
+                for j in range(len(acc) - 1, -1, -1):
+                    if t - acc_day[j] > thin_days:
+                        break
+                    dlat = (la - acc_lat[j]) * 111.19
+                    dlon = (lo_ - acc_lon[j]) * 111.19 * np.cos(np.radians(la))
+                    if dlat * dlat + dlon * dlon < thin_km ** 2:
+                        ok = False
+                        break
+                if ok:
+                    acc.append(si); acc_lat.append(la); acc_lon.append(lo_); acc_day.append(t)
+            sel = np.zeros(len(sizes), dtype=bool)
+            sel[np.array(acc)] = True
+        idx2, st2, sz2, cp2 = subset(sel)
+        d2 = day[idx2]
+        zd = score(d2, st2, sz2, cp2)
+        znp = score(np.cos(2 * np.pi * d2 / 181_000.0), st2, sz2, cp2)
+        zdm = score(np.array([(x % 30.44) for x in d2]), st2, sz2, cp2)
+        print(f"{thin_km:>6} {thin_days:>6} {int(sel.sum()):>8} "
+              f"{zd:>+9.3f} {znp:>+9.3f} {zdm:>+16.3f}", flush=True)
 
 
 if __name__ == "__main__":

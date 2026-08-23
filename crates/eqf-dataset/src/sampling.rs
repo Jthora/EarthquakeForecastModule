@@ -251,6 +251,19 @@ pub fn build(
             let day_floor = q.day.floor();
             let frac = q.day - day_floor;
             let (y, m, _) = civil_from_days(day_floor as i64);
+            // Same rule as the year-stratified scheme: a month clipped by the span
+            // yields one-sided referents. Only the first and last month of the
+            // study are affected, but the principle is the same.
+            let month_len = (1..=31)
+                .rev()
+                .find(|&d| days_from_civil_checked(y, m, d).is_some())
+                .unwrap_or(28);
+            let m_start = days_from_civil_checked(y, m, 1).unwrap_or(i64::MIN);
+            let m_end = days_from_civil_checked(y, m, month_len).unwrap_or(i64::MAX);
+            if (m_start as f64) < span.0 || (m_end as f64) > span.1 {
+                out.pop();
+                continue;
+            }
             let mut k = 1i64;
             // Walk outwards in both directions until the month is left behind.
             let mut refs: Vec<f64> = Vec::new();
@@ -293,7 +306,22 @@ pub fn build(
             // Blocks are anchored to a fixed epoch year so they are a property of
             // the calendar, not of the case.
             let block = (y - 1900).div_euclid(by);
-            for yy in (1900 + block * by)..(1900 + (block + 1) * by) {
+            let (b0, b1) = (1900 + block * by, 1900 + (block + 1) * by);
+            // Drop the case entirely if its block runs past either end of the
+            // study span. A clipped block keeps only the referents that fit, which
+            // are systematically on one side of the case -- a case in 1976 whose
+            // block starts in 1972 gets none of its earlier referents and all of
+            // its later ones. That is a one-sided referent set, exchangeability is
+            // gone, and it shows up as a direct dependence on date: measured on
+            // M5.5+ before this fix, z(date) was -6.365, and unlike a clustering
+            // artefact it survived thinning to 1000 km and 365 days.
+            let block_start = days_from_civil_checked(b0, 1, 1).unwrap_or(i64::MIN);
+            let block_end = days_from_civil_checked(b1 - 1, 12, 31).unwrap_or(i64::MAX);
+            if (block_start as f64) < span.0 || (block_end as f64) > span.1 {
+                out.pop(); // remove the case row pushed above
+                continue;
+            }
+            for yy in b0..b1 {
                 if yy == y {
                     continue;
                 }
@@ -482,6 +510,41 @@ mod tests {
             "expected the bidirectional design to centre the case ({bd:.3}) \
              far more than the time-stratified one ({ts:.3})"
         );
+    }
+
+    /// Cases whose referent window is clipped by the study span must be dropped,
+    /// not served a one-sided referent set.
+    #[test]
+    fn strata_with_clipped_referent_windows_are_excluded() {
+        let g = Grid::new(100.0);
+        let mut rng = Rng::seed(41);
+        let span = (-8766.0, 9132.0);   // 1976-01-01 to 2025-01-01
+
+        // Year-stratified: blocks are anchored at 1900, so with 6-year blocks the
+        // 1972-1977 block is clipped and cases in 1976-77 must not appear.
+        let qs: Vec<Quake> = [-8700.0, -8000.0, 0.0, 3000.0, 9000.0]
+            .iter()
+            .map(|&d| quake(d, 10.0, 20.0))
+            .collect();
+        let rows = build(&qs, &g, Scheme::YearStratified { block_years: 6 }, 0, span, &mut rng);
+        let case_days: Vec<f64> = rows.iter().filter(|r| r.case).map(|r| r.day).collect();
+        assert!(!case_days.contains(&-8700.0), "1976 case survived a clipped block");
+        // Day -8000 is February 1978, whose block 1978-1983 lies wholly inside
+        // the span, so it must survive.
+        assert!(case_days.contains(&-8000.0), "1978 case was dropped though its \
+                 block is fully inside the span");
+        assert!(case_days.contains(&0.0), "2000 case should be kept");
+
+        // Every surviving stratum must have a symmetric, full referent count.
+        let mut i = 0;
+        while i < rows.len() {
+            let mut j = i + 1;
+            while j < rows.len() && !rows[j].case {
+                j += 1;
+            }
+            assert_eq!(j - i, 6, "block of 6 years should give the case plus 5 referents");
+            i = j;
+        }
     }
 
     #[test]
