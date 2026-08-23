@@ -12,14 +12,18 @@ and k controls the model says which row is the case, so it is a softmax over the
 stratum and the intercept cancels. That is what makes the design immune to the
 case rate -- no calibration of absolute probability is attempted or needed.
 
-Standardisation is folded into the coefficients rather than applied to the data.
-With gamma = beta/sigma,
+Features are standardised in place after loading, using training-period
+statistics only.
 
-    eta_i = sum_k (x_ik - mu_k)/sigma_k * beta_k = (X @ gamma)_i - mu . gamma
-
-and the mu term is constant within a stratum, so it cancels in the softmax. The
-fit therefore runs on the raw matrix with no standardised copy and no per-chunk
-arithmetic; sigma survives only in the penalty, as lambda/2 * sum (gamma_k sigma_k)^2.
+An earlier version folded the standardisation into the coefficients instead:
+with gamma = beta/sigma the mean term is constant within a stratum and cancels
+in the softmax, so the fit could run on the raw matrix with sigma surviving only
+in the penalty. That is algebraically correct and numerically useless. It leaves
+L-BFGS looking at raw columns whose variances span 0.5 for a cosine to 4e8 for a
+lunar distance in km, a condition number around 1e9, and the quasi-Newton
+approximation cannot cope: at lambda = 1e-4, where a model with 9781 features
+and 8414 strata should overfit to near log2(5) bits, it reached 0.0005 and
+stopped. The synthetic null missed it because those features were all N(0, 1).
 """
 
 import argparse, json, os, sys, time
@@ -48,13 +52,18 @@ def segments(stratum):
     return np.concatenate(([0], change))
 
 
-def eta_chunked(X, gamma, idx):
-    """X[idx] @ gamma straight from the memmap, for splits not held in RAM."""
+def eta_chunked(X, beta, idx, mu, sigma):
+    """X[idx] standardised @ beta, straight from the memmap.
+
+    For splits not held in RAM. The same training-period mu and sigma are applied
+    here as were applied in place to the training split.
+    """
     out = np.empty(len(idx), dtype=np.float64)
-    g32 = gamma.astype(np.float32)
+    b32 = beta.astype(np.float32)
     for a in range(0, len(idx), CHUNK):
         b = min(a + CHUNK, len(idx))
-        out[a:b] = X[idx[a:b]] @ g32
+        blk = (X[idx[a:b]] - mu) * sigma
+        out[a:b] = blk @ b32
     return out
 
 
@@ -125,36 +134,43 @@ class Split:
             self.Xm = materialise(self.X, self.idx)
         return self.Xm.nbytes / 1e9
 
+    def standardise(self, mu, inv_sigma):
+        """Apply (x - mu) / sigma in place, in chunks, so no copy is made."""
+        for a in range(0, len(self.Xm), CHUNK):
+            b = min(a + CHUNK, len(self.Xm))
+            self.Xm[a:b] -= mu
+            self.Xm[a:b] *= inv_sigma
+        self.standardised = True
+
     @property
     def n_strata(self):
         return len(self.sizes)
 
-    def logp_case(self, gamma):
+    def logp_case(self, beta, mu=None, inv_sigma=None):
         """Log probability assigned to the true case in each stratum."""
         if self.Xm is not None:
-            eta = (self.Xm @ gamma.astype(np.float32)).astype(np.float64)
+            eta = (self.Xm @ beta.astype(np.float32)).astype(np.float64)
         else:
-            eta = eta_chunked(self.X, gamma, self.idx)
+            eta = eta_chunked(self.X, beta, self.idx, mu, inv_sigma)
         m = np.maximum.reduceat(eta, self.starts)
         e = np.exp(eta - m[self.seg])
         denom = np.add.reduceat(e, self.starts)
         eta_case = eta[self.y == 1]
         return eta_case - m - np.log(denom), eta, e, denom
 
-    def neg_loglik_and_grad(self, gamma, lam, sigma2, active):
-        lp, eta, e, denom = self.logp_case(gamma)
+    def neg_loglik_and_grad(self, beta, lam, active):
+        lp, eta, e, denom = self.logp_case(beta)
         nll = -lp.sum()
         p = e / denom[self.seg]
         g = (self.Xm.T @ (p - self.y).astype(np.float32)).astype(np.float64)
-        pen = lam * gamma * sigma2
-        obj = nll + 0.5 * lam * float(np.sum(sigma2 * gamma * gamma))
-        grad = g + pen
+        obj = nll + 0.5 * lam * float(beta @ beta)
+        grad = g + lam * beta
         grad[~active] = 0.0
         return obj, grad
 
-    def info_gain(self, gamma):
+    def info_gain(self, beta, mu=None, inv_sigma=None):
         """Bits per event above a model that assigns 1/size to every row."""
-        lp, _, _, _ = self.logp_case(gamma)
+        lp, _, _, _ = self.logp_case(beta, mu, inv_sigma)
         null = -np.log(self.sizes.astype(np.float64))
         return float(np.mean(lp - null) / np.log(2))
 
@@ -213,24 +229,39 @@ def main():
     active = sigma > 1e-9
     print(f"  {int((~active).sum())} constant columns dropped, "
           f"{int(active.sum())} active ({time.time()-t0:.0f}s)")
-    sigma2 = np.where(active, var, 1.0)
+    # A constant column gets inv_sigma 0, so it standardises to exactly zero and
+    # contributes nothing rather than dividing by zero.
+    mu32 = mu.astype(np.float32)
+    inv_sigma32 = np.where(active, 1.0 / np.where(active, sigma, 1.0), 0.0).astype(np.float32)
+    t0 = time.time()
+    train.standardise(mu32, inv_sigma32)
+    print(f"  standardised training split in place ({time.time()-t0:.0f}s)")
+    # Sanity: standardised columns must have unit variance, or the fit is being
+    # handed the same ill-conditioned problem under a different name.
+    chk = train.Xm[:8192, active].astype(np.float64)
+    sd = chk.std(0)
+    print(f"  column sd after standardising: min {sd.min():.3f}, "
+          f"median {np.median(sd):.3f}, max {sd.max():.3f}")
 
     results = []
     for lam in [float(x) for x in a.lambdas.split(",")]:
         t0 = time.time()
         g0 = np.zeros(d)
         r = minimize(
-            lambda g: train.neg_loglik_and_grad(g, lam, sigma2, active),
+            lambda g: train.neg_loglik_and_grad(g, lam, active),
             g0, jac=True, method="L-BFGS-B",
-            options={"maxiter": a.maxiter, "gtol": 1e-6, "maxcor": 10},
+            options={"maxiter": a.maxiter, "gtol": 1e-8, "ftol": 1e-14,
+                     "maxcor": 20},
         )
-        ig_tr, ig_va = train.info_gain(r.x), val.info_gain(r.x)
+        ig_tr = train.info_gain(r.x)
+        ig_va = val.info_gain(r.x, mu32, inv_sigma32)
         results.append({"lambda": lam, "train_ig": ig_tr, "val_ig": ig_va,
                         "iters": int(r.nit), "converged": bool(r.success),
                         "gnorm": float(np.max(np.abs(r.jac)))})
         print(f"  lambda {lam:<8g}  train {ig_tr:+.5f}  validate {ig_va:+.5f} bits"
               f"   {r.nit} iters, {time.time()-t0:.0f}s")
-        np.save(a.data + f".gamma_lam{lam:g}.npy", r.x)
+        np.save(a.data + f".beta_lam{lam:g}.npy", r.x)
+    np.save(a.data + ".scale.npy", np.vstack([mu, sigma]))
 
     best = max(results, key=lambda r: r["val_ig"])
     print(f"\nbest on validation: lambda {best['lambda']:g}, "

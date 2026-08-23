@@ -82,16 +82,19 @@ def fit(prefix, lam):
     dos = np.array([case_day.get(s, np.nan) for s in rows["stratum"]])
     tr, va = dos < 3652.0, (dos >= 3652.0) & (dos < 6210.0)
     train, val = cl.Split(X, rows, tr, d), cl.Split(X, rows, va, d)
-    train.load(); val.load()
-    n = len(train.idx)
+    train.load()
     blk = train.Xm.astype(np.float64)
-    var = np.maximum(blk.var(0), 0.0)
-    active = np.sqrt(var) > 1e-9
+    mu, var = blk.mean(0), np.maximum(blk.var(0), 0.0)
+    sigma = np.sqrt(var)
+    active = sigma > 1e-9
+    mu32 = mu.astype(np.float32)
+    inv32 = np.where(active, 1.0 / np.where(active, sigma, 1.0), 0.0).astype(np.float32)
+    train.standardise(mu32, inv32)
     from scipy.optimize import minimize
-    r = minimize(lambda g: train.neg_loglik_and_grad(g, lam, np.where(active, var, 1.0), active),
+    r = minimize(lambda g: train.neg_loglik_and_grad(g, lam, active),
                  np.zeros(d), jac=True, method="L-BFGS-B",
-                 options={"maxiter": 500, "gtol": 1e-8})
-    return train.info_gain(r.x), val.info_gain(r.x), r.x, train, val
+                 options={"maxiter": 500, "gtol": 1e-8, "ftol": 1e-14})
+    return train.info_gain(r.x), val.info_gain(r.x, mu32, inv32), r.x, train, val
 
 
 def main():
