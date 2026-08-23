@@ -33,7 +33,12 @@ import argparse, json, os, sys, time
 import numpy as np
 
 TEST_START = 6210.0     # 2017-01-01
-TARGET_CHUNK = 8192
+
+# Rows per read. The chunk is held as float64 -- float32 centring destroys slow
+# features -- so at 9816 features a chunk costs rows * 78 KB. 8192 rows is 643 MB,
+# which on a machine with about 1.5 GB free swaps rather than streams and brings
+# the pass to a standstill. 1024 rows is 80 MB and runs at disk speed.
+TARGET_CHUNK = 1024
 
 
 def main():
@@ -47,6 +52,11 @@ def main():
                          "known effect of this size on --plant-feature, to measure "
                          "what size of effect this scan would actually detect")
     ap.add_argument("--plant-feature", default="geo.moon.syn.h2.cos")
+    ap.add_argument("--chunk-rows", type=int, default=TARGET_CHUNK)
+    ap.add_argument("--thin-km", type=float, default=0.0,
+                    help="drop strata within this distance of an already-kept one")
+    ap.add_argument("--thin-days", type=float, default=0.0,
+                    help="...and within this many days of it")
     a = ap.parse_args()
     out = a.out or (a.data + ".scan.json")
 
@@ -74,6 +84,45 @@ def main():
     keep = (case_day < TEST_START) & (sizes > 1) & ~np.isnan(case_day)
     ks = starts[keep]
     kz = sizes[keep]
+    # Thinning to mutually distant strata.
+    #
+    # The within-stratum permutation null treats strata as independent. They are
+    # not: declustering leaves nearby events behind, and two events months apart
+    # in the same region share almost identical values for any slow-moving
+    # feature. That correlation inflates Var(U) above what the permutation
+    # assumes, and the inflation lands hardest on the slowest features -- which
+    # is how Neptune-Pluto, whose relative longitude drifts 0.006 deg/day, came
+    # out as the strongest hit on the unthinned M4 catalogue at p = 0.005.
+    #
+    # It was not a marginal call. Plain calendar date scored z = +3.2 there, and
+    # day-of-month +3.3, against Neptune-Pluto's +3.7; under thinning date fell
+    # to +0.04 and the Neptune-Pluto proxy to -0.78. See scripts/calendar_check.py.
+    if a.thin_km > 0 and a.thin_days > 0:
+        lat_s = rows["lat"].astype(np.float64)[ks]
+        lon_s = rows["lon"].astype(np.float64)[ks]
+        cds = case_day[keep]
+        order = np.argsort(cds)
+        keep_thin = np.zeros(len(ks), dtype=bool)
+        aln, alo, ady = [], [], []
+        for oi in order:
+            t, la, lo_ = cds[oi], lat_s[oi], lon_s[oi]
+            ok = True
+            for j in range(len(ady) - 1, -1, -1):
+                if t - ady[j] > a.thin_days:
+                    break
+                dlat = (la - aln[j]) * 111.19
+                dlon = (lo_ - alo[j]) * 111.19 * np.cos(np.radians(la))
+                if dlat * dlat + dlon * dlon < a.thin_km ** 2:
+                    ok = False
+                    break
+            if ok:
+                keep_thin[oi] = True
+                aln.append(la); alo.append(lo_); ady.append(t)
+        print(f"thinned to {int(keep_thin.sum())} of {len(ks)} strata "
+              f"(min {a.thin_km:.0f} km and {a.thin_days:.0f} days apart)")
+        ks = ks[keep_thin]
+        kz = kz[keep_thin]
+
     n_strata = len(ks)
     print(f"{n_strata} usable strata before {TEST_START:.0f} "
           f"({int(kz.sum())} rows); test period never read")
@@ -116,10 +165,11 @@ def main():
     t0 = time.time()
     i = 0
     done_rows = 0
+    last_report = 0
     while i < n_strata:
         j = i
         n_rows = 0
-        while j < n_strata and n_rows < TARGET_CHUNK:
+        while j < n_strata and n_rows < a.chunk_rows:
             # Stop the block if the next stratum is not adjacent in the file.
             if j > i and ks[j] != ks[j - 1] + kz[j - 1]:
                 break
@@ -165,7 +215,11 @@ def main():
 
         done_rows += hi - lo
         i = j
-        if (i // 2000) != ((i - (j - i)) // 2000):
+        # Compared against the last reported count, not against a stale index --
+        # the previous form compared i to 2i-j after i had already advanced and so
+        # almost never fired.
+        if done_rows - last_report >= 100_000:
+            last_report = done_rows
             el = time.time() - t0
             print(f"  {done_rows}/{int(kz.sum())} rows  {el:.0f}s elapsed, "
                   f"{el * (kz.sum()/max(done_rows,1) - 1):.0f}s left", flush=True)
