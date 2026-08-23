@@ -100,6 +100,8 @@ def main():
                          "for each, since only the labels change")
     ap.add_argument("--plant-feature", default="geo.moon.syn.h2.cos")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--filter-col", default=None)
+    ap.add_argument("--filter-val", default=None)
     ap.add_argument("--thin-km", type=float, default=0.0)
     ap.add_argument("--thin-days", type=float, default=0.0)
     a = ap.parse_args()
@@ -122,6 +124,14 @@ def main():
         if len(c) == 1:
             case_day[si] = day[lo + c[0]]
     usable = (sizes > 1) & ~np.isnan(case_day)
+    if a.filter_col and a.filter_val:
+        # The label sits on every row of a stratum, so reading it at the stratum's
+        # first row keeps whole strata -- a sliced stratum would be scored against
+        # a partial softmax denominator.
+        lab = np.array([str(rows[a.filter_col][s]) for s in starts])
+        usable &= (lab == a.filter_val)
+        print(f"restricted to {a.filter_col} == {a.filter_val}: "
+              f"{int(usable.sum())} strata")
     tr_s = np.flatnonzero(usable & (case_day < TRAIN_END))
     va_s = np.flatnonzero(usable & (case_day >= TRAIN_END) & (case_day < VAL_END))
 
