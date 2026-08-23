@@ -48,8 +48,8 @@ def segments(stratum):
     return np.concatenate(([0], change))
 
 
-def eta_of(X, gamma, idx):
-    """X[idx] @ gamma, in chunks so no large temporary is ever built."""
+def eta_chunked(X, gamma, idx):
+    """X[idx] @ gamma straight from the memmap, for splits not held in RAM."""
     out = np.empty(len(idx), dtype=np.float64)
     g32 = gamma.astype(np.float32)
     for a in range(0, len(idx), CHUNK):
@@ -58,22 +58,46 @@ def eta_of(X, gamma, idx):
     return out
 
 
-def xt_dot(X, v, idx, d):
-    """X[idx].T @ v, accumulated in float64."""
-    acc = np.zeros(d, dtype=np.float64)
+def materialise(X, idx):
+    """Copy the split's rows out of the memmap into a contiguous array.
+
+    Without this the fit is disk-bound: L-BFGS touches every row twice per
+    iteration, and re-reading 3.6 GB through a memmap costs ~37 s per iteration
+    at 14% CPU. Held in RAM the same iteration is under a second. The cost is
+    that the split must fit -- 92k rows x 9816 f32 is 3.6 GB -- so this is done
+    per split rather than for the whole matrix.
+    """
+    out = np.empty((len(idx), X.shape[1]), dtype=np.float32)
     for a in range(0, len(idx), CHUNK):
         b = min(a + CHUNK, len(idx))
-        acc += X[idx[a:b]].T @ v[a:b].astype(np.float32)
-    return acc
+        out[a:b] = X[idx[a:b]]
+    return out
 
 
 class Split:
     """Rows of one period, grouped into strata."""
 
-    def __init__(self, X, rows, mask, d):
+    def __init__(self, X, rows, mask, d, max_controls=None):
         idx = np.flatnonzero(mask)
         order = np.argsort(rows["stratum"][idx], kind="stable")
-        self.idx = idx[order]
+        idx = idx[order]
+        if max_controls is not None:
+            # Keep the case and the first `max_controls` controls of each stratum.
+            # They were drawn in generator order, so taking a prefix is an unbiased
+            # subsample, and it is deterministic given the dataset's seed.
+            keep = np.zeros(len(idx), dtype=bool)
+            seen = {}
+            for j, i in enumerate(idx):
+                s_id = rows["stratum"][i]
+                if rows["case"][i]:
+                    keep[j] = True
+                else:
+                    c = seen.get(s_id, 0)
+                    if c < max_controls:
+                        keep[j] = True
+                        seen[s_id] = c + 1
+            idx = idx[keep]
+        self.idx = idx
         self.stratum = rows["stratum"][self.idx]
         self.y = rows["case"][self.idx].astype(np.float64)
         self.starts = segments(self.stratum)
@@ -81,6 +105,7 @@ class Split:
                              np.diff(np.append(self.starts, len(self.idx))))
         self.sizes = np.diff(np.append(self.starts, len(self.idx)))
         self.X, self.d = X, d
+        self.Xm = None
         # A stratum whose case fell outside the period, or which lost every
         # control, carries no information and would divide by zero.
         keep = np.isin(self.seg, np.flatnonzero((self.sizes > 1)))
@@ -94,13 +119,22 @@ class Split:
                                  np.diff(np.append(self.starts, len(self.idx))))
             self.sizes = np.diff(np.append(self.starts, len(self.idx)))
 
+    def load(self):
+        """Bring this split into RAM. Returns GB used."""
+        if self.Xm is None:
+            self.Xm = materialise(self.X, self.idx)
+        return self.Xm.nbytes / 1e9
+
     @property
     def n_strata(self):
         return len(self.sizes)
 
     def logp_case(self, gamma):
         """Log probability assigned to the true case in each stratum."""
-        eta = eta_of(self.X, gamma, self.idx)
+        if self.Xm is not None:
+            eta = (self.Xm @ gamma.astype(np.float32)).astype(np.float64)
+        else:
+            eta = eta_chunked(self.X, gamma, self.idx)
         m = np.maximum.reduceat(eta, self.starts)
         e = np.exp(eta - m[self.seg])
         denom = np.add.reduceat(e, self.starts)
@@ -111,7 +145,7 @@ class Split:
         lp, eta, e, denom = self.logp_case(gamma)
         nll = -lp.sum()
         p = e / denom[self.seg]
-        g = xt_dot(self.X, p - self.y, self.idx, self.d)
+        g = (self.Xm.T @ (p - self.y).astype(np.float32)).astype(np.float64)
         pen = lam * gamma * sigma2
         obj = nll + 0.5 * lam * float(np.sum(sigma2 * gamma * gamma))
         grad = g + pen
@@ -131,6 +165,8 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--maxiter", type=int, default=500)
     ap.add_argument("--lambdas", default="1e-4,1e-3,1e-2,1e-1,1,10,100,1000")
+    ap.add_argument("--max-controls", type=int, default=None,
+                    help="keep at most this many controls per stratum (memory)")
     a = ap.parse_args()
     out = a.out or (a.data + ".logit.json")
 
@@ -151,16 +187,25 @@ def main():
     tr = day_of_stratum < TRAIN_END
     va = (day_of_stratum >= TRAIN_END) & (day_of_stratum < VAL_END)
     te = day_of_stratum >= VAL_END
-    train, val = Split(X, rows, tr, d), Split(X, rows, va, d)
+    train = Split(X, rows, tr, d, a.max_controls)
+    val = Split(X, rows, va, d, a.max_controls)
     print(f"train {train.n_strata} strata, validate {val.n_strata} strata, "
           f"test {int(np.sum(te & (rows['case'] == 1)))} strata (sealed)")
+    print(f"controls per stratum: {float(np.mean(train.sizes)) - 1:.2f} (train)")
+
+    # Only the training split goes into RAM: L-BFGS touches it twice per
+    # iteration, whereas validation is scored once per lambda and can stream.
+    t0 = time.time()
+    gb = train.load()
+    print(f"loaded train into RAM: {gb:.2f} GB ({time.time()-t0:.0f}s); "
+          f"validate streams from disk")
 
     print("computing training-period feature scales...")
     t0 = time.time()
     n = len(train.idx)
     s1 = np.zeros(d); s2 = np.zeros(d)
     for i in range(0, n, CHUNK):
-        blk = X[train.idx[i:min(i + CHUNK, n)]].astype(np.float64)
+        blk = train.Xm[i:min(i + CHUNK, n)].astype(np.float64)
         s1 += blk.sum(0); s2 += (blk * blk).sum(0)
     mu = s1 / n
     var = np.maximum(s2 / n - mu * mu, 0.0)

@@ -215,3 +215,29 @@ Recorded now so it cannot be rationalised later.
 *If the result is negative, this document is what makes the negative worth
 having. If it is positive, this document is the only reason anyone should
 believe it.*
+
+---
+
+## Amendment 1 — 2026-08-22, before any real fit
+
+**Controls per case reduced from 10 to 4 for the fitted model.**
+
+Reason: hardware, not results. The machine has 9 GB of RAM and ~2.5 GB of real
+headroom. Holding the training split at 10 controls needs 3.6 GB, which drove the
+machine into swap — 14 GB of it — and the fit made 2m43s of progress in 12m26s of
+wall clock. Subsampling to 4 controls brings the training split to 1.65 GB.
+
+Cost: a matched set with 1 case and *k* controls carries `k/(k+1)` of the
+information available at *k* = ∞, so 10 → 4 gives up about 12% of the efficiency.
+The null baseline changes from log₂(1/11) = −3.459 to log₂(1/5) = −2.322 bits;
+information gain is defined relative to each stratum's own size, so the metric and
+the 0.01-bit threshold in §8 are unaffected and remain comparable.
+
+The controls kept are the first four per stratum in generator order, which is an
+unbiased subsample and is deterministic given the dataset seed. **The 10-control
+matrices are unchanged on disk** and can be refitted without regeneration if more
+memory becomes available.
+
+This amendment is written before any model has been fitted to real features. The
+only quantities observed at this point are row counts, feature counts, timings,
+and the null-calibration results on synthetic data.

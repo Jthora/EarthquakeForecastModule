@@ -82,8 +82,9 @@ def fit(prefix, lam):
     dos = np.array([case_day.get(s, np.nan) for s in rows["stratum"]])
     tr, va = dos < 3652.0, (dos >= 3652.0) & (dos < 6210.0)
     train, val = cl.Split(X, rows, tr, d), cl.Split(X, rows, va, d)
+    train.load(); val.load()
     n = len(train.idx)
-    blk = X[train.idx].astype(np.float64)
+    blk = train.Xm.astype(np.float64)
     var = np.maximum(blk.var(0), 0.0)
     active = np.sqrt(var) > 1e-9
     from scipy.optimize import minimize
