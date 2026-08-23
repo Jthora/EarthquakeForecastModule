@@ -7,4 +7,5 @@
 
 pub mod cells;
 pub mod decluster;
+pub mod strata;
 pub mod sampling;
