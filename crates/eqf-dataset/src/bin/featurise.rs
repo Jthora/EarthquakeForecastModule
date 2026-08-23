@@ -23,8 +23,8 @@
 //! time, so rows are processed in chunks and each chunk makes one SPICE call per
 //! frame rather than one per row.
 
-use eqf::comcat;
-use eqf_dataset::{cells::Grid, decluster, sampling};
+use eqf::{comcat, gcmt};
+use eqf_dataset::{cells::Grid, decluster, sampling, strata};
 use ph_core::{chart, chart_cycles, chart_features, chart_local};
 use rustspice_core::KernelSet;
 use std::io::{BufWriter, Write};
@@ -46,6 +46,7 @@ struct Config {
     out: String,
     catalogue: String,
     limit: usize,
+    format: String,
 }
 
 fn parse_args() -> Config {
@@ -64,6 +65,7 @@ fn parse_args() -> Config {
         out: "dataset".into(),
         catalogue: "data/comcat/global_m40.csv".into(),
         limit: usize::MAX,
+        format: "comcat".into(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -92,6 +94,7 @@ fn parse_args() -> Config {
             "--seed" => c.seed = val!().parse().unwrap(),
             "--out" => c.out = val!(),
             "--catalogue" => c.catalogue = val!(),
+            "--format" => c.format = val!(),
             "--limit" => c.limit = val!().parse().unwrap(),
             other => panic!("unknown argument {other}"),
         }
@@ -128,8 +131,42 @@ fn main() -> rustspice_core::Result<()> {
     let cfg = parse_args();
     let t_start = std::time::Instant::now();
 
-    let csv = std::fs::read_to_string(&cfg.catalogue).expect("read catalogue");
-    let all = comcat::parse_catalog(&csv);
+    // GCMT carries the focal mechanisms, so when it is the source it is also the
+    // event list -- associating two catalogues event by event would introduce
+    // matching errors for no gain.
+    let text = std::fs::read_to_string(&cfg.catalogue).expect("read catalogue");
+    let (all, labels): (Vec<comcat::Quake>, Option<Vec<(&'static str, &'static str)>>) =
+        if cfg.format == "gcmt" {
+            let cmts = gcmt::parse_ndk(&text);
+            let mut qs = Vec::with_capacity(cmts.len());
+            let mut ls = Vec::with_capacity(cmts.len());
+            for c in &cmts {
+                qs.push(comcat::Quake {
+                    day: c.day,
+                    lat_deg: c.lat_deg,
+                    lon_deg: c.lon_deg,
+                    depth_km: c.depth_km,
+                    magnitude: c.mw,
+                });
+                ls.push((
+                    strata::mechanism(c).name(),
+                    if strata::depth_class(c) == strata::Depth::Shallow { "shallow" } else { "deep" },
+                ));
+            }
+            (qs, Some(ls))
+        } else {
+            (comcat::parse_catalog(&text), None)
+        };
+    // Labels must follow their events through declustering, so they are carried on
+    // a key rather than an index -- gardner_knopoff returns a filtered copy.
+    let label_of: std::collections::HashMap<u64, (&'static str, &'static str)> = match &labels {
+        Some(ls) => all
+            .iter()
+            .zip(ls)
+            .map(|(q, l)| (q.day.to_bits(), *l))
+            .collect(),
+        None => Default::default(),
+    };
     let (span_lo, span_hi) = all
         .iter()
         .fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(q.day), b.max(q.day)));
@@ -195,18 +232,33 @@ fn main() -> rustspice_core::Result<()> {
     let mut n_features = 0usize;
 
     let mut meta = BufWriter::new(std::fs::File::create(format!("{}.rows.csv", cfg.out))?);
-    writeln!(meta, "day,cell,lat,lon,case,stratum,magnitude").unwrap();
+    writeln!(meta, "day,cell,lat,lon,case,stratum,magnitude,mech,depthclass").unwrap();
+    // A stratum's label is its case's label; controls inherit it so that filtering
+    // on the column keeps whole strata rather than slicing them.
+    let case_label: std::collections::HashMap<u32, (&str, &str)> = rows
+        .iter()
+        .filter(|r| r.case)
+        .map(|r| {
+            (
+                r.stratum,
+                *label_of.get(&r.day.to_bits()).unwrap_or(&("", "")),
+            )
+        })
+        .collect();
     for r in &rows {
+        let (mech, dep) = case_label.get(&r.stratum).copied().unwrap_or(("", ""));
         writeln!(
             meta,
-            "{:.9},{},{:.4},{:.4},{},{},{}",
+            "{:.9},{},{:.4},{:.4},{},{},{},{},{}",
             r.day,
             r.cell,
             r.lat_deg,
             r.lon_deg,
             if r.case { 1 } else { 0 },
             r.stratum,
-            if r.magnitude.is_nan() { String::new() } else { format!("{:.2}", r.magnitude) }
+            if r.magnitude.is_nan() { String::new() } else { format!("{:.2}", r.magnitude) },
+            mech,
+            dep
         )
         .unwrap();
     }

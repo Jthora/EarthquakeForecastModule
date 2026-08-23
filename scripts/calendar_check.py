@@ -46,6 +46,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--perms", type=int, default=2000)
+    ap.add_argument("--filter-col", default=None)
+    ap.add_argument("--filter-val", default=None)
     a = ap.parse_args()
 
     rows = np.genfromtxt(a.data + ".rows.csv", delimiter=",", names=True,
@@ -63,6 +65,10 @@ def main():
                          for s, z in zip(starts, sizes)])
     cd = np.array([day[s + p] if p >= 0 else np.nan for s, p in zip(starts, case_pos)])
     keep = (case_pos >= 0) & (sizes > 1) & (cd < TEST_START)
+    if a.filter_col and a.filter_val:
+        lab = np.array([str(rows[a.filter_col][s]) for s in starts])
+        keep &= (lab == a.filter_val)
+        print(f"restricted to {a.filter_col} == {a.filter_val}")
     print(f"{keep.sum()} usable strata")
 
     def subset(sel):

@@ -53,6 +53,10 @@ def main():
                          "what size of effect this scan would actually detect")
     ap.add_argument("--plant-feature", default="geo.moon.syn.h2.cos")
     ap.add_argument("--chunk-rows", type=int, default=TARGET_CHUNK)
+    ap.add_argument("--filter-col", default=None,
+                    help="restrict to strata whose case carries this row-metadata "
+                         "value, e.g. --filter-col mech --filter-val thrust")
+    ap.add_argument("--filter-val", default=None)
     ap.add_argument("--thin-km", type=float, default=0.0,
                     help="drop strata within this distance of an already-kept one")
     ap.add_argument("--thin-days", type=float, default=0.0,
@@ -82,6 +86,14 @@ def main():
         if len(c) == 1:
             case_day[si] = day[lo + c[0]]
     keep = (case_day < TEST_START) & (sizes > 1) & ~np.isnan(case_day)
+    if a.filter_col and a.filter_val:
+        col = rows[a.filter_col]
+        # The label is written on every row of a stratum, so reading it at the
+        # stratum's first row keeps whole strata rather than slicing them.
+        lab = np.array([str(col[s]) for s in starts])
+        keep &= (lab == a.filter_val)
+        print(f"restricted to {a.filter_col} == {a.filter_val}: "
+              f"{int(keep.sum())} strata")
     ks = starts[keep]
     kz = sizes[keep]
     # Thinning to mutually distant strata.
