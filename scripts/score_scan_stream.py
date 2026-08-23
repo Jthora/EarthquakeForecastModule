@@ -42,6 +42,11 @@ def main():
     ap.add_argument("--perms", type=int, default=200)
     ap.add_argument("--top", type=int, default=30)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--plant-beta", type=float, default=0.0,
+                    help="reassign which row of each stratum is the case, from a "
+                         "known effect of this size on --plant-feature, to measure "
+                         "what size of effect this scan would actually detect")
+    ap.add_argument("--plant-feature", default="geo.moon.syn.h2.cos")
     a = ap.parse_args()
     out = a.out or (a.data + ".scan.json")
 
@@ -72,6 +77,27 @@ def main():
     n_strata = len(ks)
     print(f"{n_strata} usable strata before {TEST_START:.0f} "
           f"({int(kz.sum())} rows); test period never read")
+
+    # Planting has to happen before the pass, and needs the chosen feature's column
+    # standardised across the whole period, so it is read once up front.
+    planted_case = None
+    if a.plant_beta > 0:
+        kf = names.index(a.plant_feature)
+        col = np.empty(int(kz.sum()) + 0, dtype=np.float64)
+        vals = []
+        for lo, sz in zip(ks, kz):
+            vals.append(np.asarray(X[lo:lo + sz, kf], dtype=np.float64))
+        col = np.concatenate(vals)
+        col = (col - col.mean()) / max(col.std(), 1e-12)
+        prng = np.random.default_rng(20260823)
+        planted_case = {}
+        off = 0
+        for si, (lo, sz) in enumerate(zip(ks, kz)):
+            w = np.exp(a.plant_beta * col[off:off + sz])
+            planted_case[si] = int(prng.choice(sz, p=w / w.sum()))
+            off += sz
+        print(f"PLANTED beta={a.plant_beta} on '{a.plant_feature}' -- "
+              f"case rows reassigned; this measures detectable effect size")
 
     rng = np.random.default_rng(20260822)
     P = a.perms
@@ -122,8 +148,12 @@ def main():
         sq = np.add.reduceat(blk * blk, loc_starts, axis=0)
         V += (sq / loc_sizes[:, None]).sum(0)
 
-        c_rows = np.array([lst + np.flatnonzero(case[ks[i + t]:ks[i + t] + kz[i + t]])[0]
-                           for t, lst in enumerate(loc_starts)])
+        if planted_case is None:
+            c_rows = np.array([lst + np.flatnonzero(case[ks[i + t]:ks[i + t] + kz[i + t]])[0]
+                               for t, lst in enumerate(loc_starts)])
+        else:
+            c_rows = np.array([lst + planted_case[i + t]
+                               for t, lst in enumerate(loc_starts)])
         U += blk[c_rows].sum(0, dtype=np.float64)
 
         # One indicator row per permutation, then a single BLAS product carries

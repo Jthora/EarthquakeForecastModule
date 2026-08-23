@@ -95,6 +95,9 @@ def main():
     ap.add_argument("--rounds", type=int, default=1000)
     ap.add_argument("--early-stop", type=int, default=50)
     ap.add_argument("--plant-beta", type=float, default=0.0)
+    ap.add_argument("--plant-sweep", default=None,
+                    help="comma-separated betas; bins the data once and refits "
+                         "for each, since only the labels change")
     ap.add_argument("--plant-feature", default="geo.moon.syn.h2.cos")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
@@ -131,18 +134,27 @@ def main():
     tr_idx, tr_st, tr_sz, tr_seg, tr_y = build_split(X, rows, tr_s, starts, sizes, case, d)
     va_idx, va_st, va_sz, va_seg, va_y = build_split(X, rows, va_s, starts, sizes, case, d)
 
-    if a.plant_beta > 0:
+    def replant(beta):
+        """Redraw both splits' labels from a known effect on one real feature.
+
+        The feature matrix is untouched, so the binned Dataset built below stays
+        valid across the whole sweep -- with a custom objective LightGBM reads the
+        label only through the closures, never from the Dataset itself.
+        """
         k = names.index(a.plant_feature)
-        print(f"PLANTED beta={a.plant_beta} on '{a.plant_feature}' -- "
-              f"synthetic labels, this is a capability check")
         for idx, st, sz, y in ((tr_idx, tr_st, tr_sz, tr_y), (va_idx, va_st, va_sz, va_y)):
             col = np.asarray(X[idx, k], dtype=np.float64)
             col = (col - col.mean()) / max(col.std(), 1e-12)
             y[:] = 0.0
             for i in range(len(st)):
                 lo, hi = st[i], st[i] + sz[i]
-                w = np.exp(a.plant_beta * col[lo:hi])
+                w = np.exp(beta * col[lo:hi])
                 y[lo + rng.choice(sz[i], p=w / w.sum())] = 1.0
+
+    if a.plant_beta > 0:
+        print(f"PLANTED beta={a.plant_beta} on '{a.plant_feature}' -- "
+              f"synthetic labels, this is a capability check")
+        replant(a.plant_beta)
 
     t0 = time.time()
     params = {"max_bin": a.max_bin, "min_data_in_bin": 1, "verbose": -1}
@@ -158,24 +170,45 @@ def main():
     obj = make_objective(tr_st, tr_sz, tr_seg, tr_y)
     ev = make_eval([(tr_st, tr_sz, tr_seg, tr_y), (va_st, va_sz, va_seg, va_y)])
 
+    def fit(depth, lr, rounds=None):
+        p = {"objective": obj, "learning_rate": lr, "max_depth": depth,
+             "num_leaves": 2 ** depth, "min_data_in_leaf": 20,
+             "bagging_fraction": 0.8, "bagging_freq": 1,
+             "feature_fraction": 0.5, "max_bin": a.max_bin,
+             "verbose": -1, "seed": 20260822, "num_threads": 6}
+        hist = {}
+        bst = lgb.train(p, dtrain, num_boost_round=rounds or a.rounds,
+                        valid_sets=[dtrain, dval], valid_names=["train", "valid"],
+                        feval=ev,
+                        callbacks=[lgb.early_stopping(a.early_stop, verbose=False),
+                                   lgb.record_evaluation(hist)])
+        b = bst.best_iteration or (rounds or a.rounds)
+        return b, hist["train"]["ig"][b - 1], hist["valid"]["ig"][b - 1]
+
+    if a.plant_sweep:
+        # The power curve for Model B. Its null on real data means nothing without
+        # knowing what size of effect it would have caught.
+        print(f"\n{'beta':>6}  {'trees':>6} {'train IG':>10} {'valid IG':>10}   verdict")
+        sweep = []
+        for b in [float(x) for x in a.plant_sweep.split(",")]:
+            replant(b) if b > 0 else replant(0.0)
+            n, ig_tr, ig_va = fit(3, 0.05)
+            verdict = ("DETECTED" if ig_va >= 0.01 else
+                       "weak" if ig_va > 0 else "invisible")
+            print(f"{b:>6.2f}  {n:>6} {ig_tr:>+10.5f} {ig_va:>+10.5f}   {verdict}",
+                  flush=True)
+            sweep.append({"beta": b, "trees": int(n), "train_ig": float(ig_tr),
+                          "val_ig": float(ig_va)})
+        json.dump({"data": a.data, "sweep": sweep,
+                   "n_train_strata": int(len(tr_s))}, open(out, "w"), indent=2)
+        print(f"wrote {out}")
+        return
+
     results = []
     for depth in (2, 3, 4):
         for lr in (0.01, 0.05):
             t0 = time.time()
-            p = {"objective": obj, "learning_rate": lr, "max_depth": depth,
-                 "num_leaves": 2 ** depth, "min_data_in_leaf": 20,
-                 "bagging_fraction": 0.8, "bagging_freq": 1,
-                 "feature_fraction": 0.5, "max_bin": a.max_bin,
-                 "verbose": -1, "seed": 20260822, "num_threads": 6}
-            hist = {}
-            bst = lgb.train(p, dtrain, num_boost_round=a.rounds,
-                            valid_sets=[dtrain, dval], valid_names=["train", "valid"],
-                            feval=ev,
-                            callbacks=[lgb.early_stopping(a.early_stop, verbose=False),
-                                       lgb.record_evaluation(hist)])
-            best = bst.best_iteration or a.rounds
-            ig_tr = hist["train"]["ig"][best - 1]
-            ig_va = hist["valid"]["ig"][best - 1]
+            best, ig_tr, ig_va = fit(depth, lr)
             results.append({"depth": depth, "lr": lr, "best_iter": int(best),
                             "train_ig": float(ig_tr), "val_ig": float(ig_va)})
             print(f"  depth {depth}  lr {lr:<5}  trees {best:>4}  "
