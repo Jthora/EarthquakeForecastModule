@@ -41,6 +41,7 @@ struct Config {
     scheme: String,
     window_days: f64,
     spacing_days: u32,
+    block_years: i64,
     seed: u64,
     out: String,
     catalogue: String,
@@ -58,6 +59,7 @@ fn parse_args() -> Config {
         scheme: "dayoffset".into(),
         window_days: 90.0,
         spacing_days: 7,
+        block_years: 6,
         seed: 20260822,
         out: "dataset".into(),
         catalogue: "data/comcat/global_m40.csv".into(),
@@ -86,6 +88,7 @@ fn parse_args() -> Config {
             "--scheme" => c.scheme = val!(),
             "--window-days" => c.window_days = val!().parse().unwrap(),
             "--spacing-days" => c.spacing_days = val!().parse().unwrap(),
+            "--block-years" => c.block_years = val!().parse().unwrap(),
             "--seed" => c.seed = val!().parse().unwrap(),
             "--out" => c.out = val!(),
             "--catalogue" => c.catalogue = val!(),
@@ -149,6 +152,7 @@ fn main() -> rustspice_core::Result<()> {
         "window" => sampling::Scheme::Window { window_days: cfg.window_days },
         "uniform" => sampling::Scheme::Uniform,
         "timestratified" => sampling::Scheme::TimeStratified { spacing_days: cfg.spacing_days },
+        "yearstratified" => sampling::Scheme::YearStratified { block_years: cfg.block_years },
         other => panic!("unknown scheme {other}"),
     };
     let mut rng = sampling::Rng::seed(cfg.seed);

@@ -55,6 +55,33 @@ pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// Days since 2000-01-01 for a civil date, or `None` if the date does not exist.
+pub fn days_from_civil_checked(y: i64, m: u32, d: u32) -> Option<i64> {
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let len = match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if leap {
+                29
+            } else {
+                28
+            }
+        }
+        _ => return None,
+    };
+    if d == 0 || d > len {
+        return None;
+    }
+    let yy = if m <= 2 { y - 1 } else { y };
+    let era = if yy >= 0 { yy } else { yy - 399 } / 400;
+    let yoe = yy - era * 400;
+    let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
+    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146_097 + doe - 730_425)
+}
+
 /// How control times are drawn relative to their case.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Scheme {
@@ -88,6 +115,27 @@ pub enum Scheme {
     /// noise -- and hence in detection threshold -- cannot masquerade as signal.
     /// Control count varies between 3 and 4 depending on the month.
     TimeStratified { spacing_days: u32 },
+    /// Year-stratified: the same calendar date in every year of a fixed block.
+    ///
+    /// The within-month designs cannot see slow configurations. Jupiter moves 2.5
+    /// degrees in a month and Saturn one; across a 6-year block Jupiter covers half
+    /// its orbit. Outer-planet aspects are most of what classical astrology is
+    /// about, and no design above can test them, so this one exists to.
+    ///
+    /// Blocks are fixed by the calendar (1976-1981, 1982-1987, ...), never by the
+    /// case, and referents are the same month and day in each other year of the
+    /// case's own block. Holding the calendar date fixed holds the season and the
+    /// Earth-Sun geometry fixed with it, so what varies between a case and its
+    /// referents is almost entirely the slow planets.
+    ///
+    /// ⚠ **Exchangeability here requires a catalogue with no trend in detection.**
+    /// The case is uniform over its referent set only if the hazard is uniform
+    /// across the years of the block, and a network that improved over 49 years
+    /// breaks that: later years hold more catalogued events, so the case falls in
+    /// them more often, for reasons having nothing to do with the sky. Use this
+    /// scheme only at magnitudes where the catalogue is complete throughout --
+    /// M5.5+ globally -- and check the calibration rather than assuming it.
+    YearStratified { block_years: i64 },
 }
 
 /// One row of the training set.
@@ -237,6 +285,37 @@ pub fn build(
             continue;
         }
 
+        if let Scheme::YearStratified { block_years } = scheme {
+            let by = block_years.max(1);
+            let day_floor = q.day.floor();
+            let frac = q.day - day_floor;
+            let (y, m, dd) = civil_from_days(day_floor as i64);
+            // Blocks are anchored to a fixed epoch year so they are a property of
+            // the calendar, not of the case.
+            let block = (y - 1900).div_euclid(by);
+            for yy in (1900 + block * by)..(1900 + (block + 1) * by) {
+                if yy == y {
+                    continue;
+                }
+                // 29 February has no counterpart in a common year; skip rather than
+                // silently sliding to 1 March, which would break the date match.
+                let Some(t) = days_from_civil_checked(yy, m, dd) else { continue };
+                let t = t as f64 + frac;
+                if t >= span.0 && t <= span.1 {
+                    out.push(Row {
+                        day: t,
+                        cell,
+                        lat_deg: lat,
+                        lon_deg: lon,
+                        case: false,
+                        stratum,
+                        magnitude: f64::NAN,
+                    });
+                }
+            }
+            continue;
+        }
+
         let mut used: Vec<f64> = Vec::with_capacity(controls_per_case);
         for _ in 0..controls_per_case {
             // A few attempts, then give up on this control rather than loop forever
@@ -245,7 +324,9 @@ pub fn build(
             let mut placed = None;
             for _ in 0..32 {
                 let t = match scheme {
-                    Scheme::TimeStratified { .. } => unreachable!("handled above"),
+                    Scheme::TimeStratified { .. } | Scheme::YearStratified { .. } => {
+                        unreachable!("handled above")
+                    }
                     Scheme::DayOffset { max_days } => {
                         let k = 1.0 + rng.below(max_days as u64) as f64;
                         let sign = if rng.next_u64() & 1 == 0 { -1.0 } else { 1.0 };
@@ -401,6 +482,76 @@ mod tests {
             "expected the bidirectional design to centre the case ({bd:.3}) \
              far more than the time-stratified one ({ts:.3})"
         );
+    }
+
+    #[test]
+    fn checked_civil_conversion_inverts_and_rejects_impossible_dates() {
+        for &(y, m, d) in &[(2000i64, 1u32, 1u32), (1976, 1, 1), (2024, 2, 29),
+                            (1999, 12, 31), (2024, 12, 31)] {
+            let z = days_from_civil_checked(y, m, d).expect("valid date");
+            assert_eq!(civil_from_days(z), (y, m, d), "{y}-{m}-{d}");
+        }
+        assert_eq!(days_from_civil_checked(2023, 2, 29), None, "2023 is not a leap year");
+        assert_eq!(days_from_civil_checked(2023, 4, 31), None, "April has 30 days");
+        assert_eq!(days_from_civil_checked(2023, 13, 1), None);
+    }
+
+    #[test]
+    fn year_stratified_referents_hold_the_calendar_date_and_vary_the_year() {
+        let g = Grid::new(100.0);
+        let mut rng = Rng::seed(31);
+        let qs = sample_quakes(500, &mut rng);
+        let span = (-8766.0, 9132.0);
+        let rows = build(&qs, &g, Scheme::YearStratified { block_years: 6 }, 0, span, &mut rng);
+
+        let mut case_ymd = (0i64, 0u32, 0u32);
+        let mut years = std::collections::HashSet::new();
+        for r in &rows {
+            let (y, m, d) = civil_from_days(r.day.floor() as i64);
+            if r.case {
+                case_ymd = (y, m, d);
+                years.clear();
+                continue;
+            }
+            assert_eq!((m, d), (case_ymd.1, case_ymd.2),
+                       "referent moved off the case's calendar date");
+            assert_ne!(y, case_ymd.0, "referent shares the case's year");
+            // Same fixed block, anchored to 1900 rather than to the case.
+            assert_eq!((y - 1900).div_euclid(6), (case_ymd.0 - 1900).div_euclid(6));
+            assert!(years.insert(y), "duplicate referent year {y}");
+        }
+    }
+
+    #[test]
+    fn year_stratified_lets_the_slow_planets_move() {
+        // The reason the scheme exists. Jupiter's synodic motion across a 6-year
+        // block is most of an orbit, where within a month it is 2.5 degrees. Here
+        // that is checked on the referent SPACING, which is what sets how far the
+        // slow bodies travel between a case and its referents.
+        let g = Grid::new(100.0);
+        let mut rng = Rng::seed(32);
+        let qs = sample_quakes(300, &mut rng);
+        let span = (-8766.0, 9132.0);
+        for (scheme, min_span_days) in [
+            (Scheme::YearStratified { block_years: 6 }, 700.0),
+            (Scheme::TimeStratified { spacing_days: 7 }, 0.0),
+        ] {
+            let rows = build(&qs, &g, scheme, 0, span, &mut rng);
+            let mut case_day = 0.0;
+            let mut worst: f64 = 0.0;
+            for r in &rows {
+                if r.case {
+                    case_day = r.day;
+                } else {
+                    worst = worst.max((r.day - case_day).abs());
+                }
+            }
+            assert!(worst >= min_span_days,
+                    "{scheme:?}: widest referent offset {worst} days");
+            if matches!(scheme, Scheme::TimeStratified { .. }) {
+                assert!(worst < 32.0, "time-stratified reached {worst} days");
+            }
+        }
     }
 
     #[test]
