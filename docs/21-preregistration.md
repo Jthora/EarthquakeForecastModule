@@ -241,3 +241,60 @@ memory becomes available.
 This amendment is written before any model has been fitted to real features. The
 only quantities observed at this point are row counts, feature counts, timings,
 and the null-calibration results on synthetic data.
+
+---
+
+## Amendment 2 — 2026-08-22, primary design replaced
+
+**The primary matched design is changed from `DayOffset` to `TimeStratified`.**
+Reason: the original design's null is provably wrong, and the data said so.
+
+### The flaw
+
+With controls at *t* ± k days, the controls straddle the case. For any feature
+that varies smoothly in time the case therefore sits near its own stratum's
+mean, while a control does not. The case is identifiable from the feature values
+alone, so the rows are **not exchangeable**, and every test that assumes they are
+— the conditional likelihood and the permutation null alike — is mis-specified.
+
+This was not a suspicion. Running the score scan on the real M4.0+ catalogue:
+
+```
+permutation z sd: 1.0014 pooled; per draw 1.001 +/- 0.031
+observed z sd    0.628, at permutation quantile 0.005
+```
+
+The observed z field is about twelve standard deviations narrower than the null
+it is being compared against. The direction matters: shrinking the observed
+statistic makes the test **conservative**, so no false positive was produced and
+the negative results already recorded stand. But the design was discarding power
+it did not need to discard, and reporting a null from a mis-calibrated test
+would have been indefensible even with the sign in our favour.
+
+### The replacement
+
+Referents are every day in the case's **own calendar month** that differs from it
+by a whole multiple of 7 days. The set is fixed by the calendar rather than by
+the case, so under a uniform hazard the event was equally likely to fall on any
+member, and exchangeability holds by construction rather than by assumption.
+This is the standard time-stratified case-crossover referent scheme, which exists
+because the symmetric bidirectional design has exactly the bias found above.
+
+Seven-day spacing additionally holds **day of week** fixed, so the weekly cycle
+in cultural noise — and therefore in detection threshold — cannot masquerade as
+signal. It continues to hold local solar time fixed, as whole-day offsets did.
+Strata carry 3 or 4 referents depending on the month.
+
+`sampling::tests::the_case_is_exchangeable_with_its_referents` asserts the
+property directly: the case's rank among its stratum's times must be uniform,
+which the new scheme satisfies and the old one visibly fails.
+
+### What this changes about the reported results
+
+- Everything already reported was conservative, so the negatives survive.
+- All primary results will be re-run under the new design; the `DayOffset`
+  numbers become secondary and are reported as such.
+- The multiple-comparison count in §10 gains one design and is now **3 designs ×
+  3 magnitudes × 2 model classes = 18 primary analyses**, Holm-corrected.
+
+Recorded before any positive result was seen under any design.

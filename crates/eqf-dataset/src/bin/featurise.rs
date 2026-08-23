@@ -40,6 +40,7 @@ struct Config {
     max_days: u32,
     scheme: String,
     window_days: f64,
+    spacing_days: u32,
     seed: u64,
     out: String,
     catalogue: String,
@@ -56,6 +57,7 @@ fn parse_args() -> Config {
         max_days: 5,
         scheme: "dayoffset".into(),
         window_days: 90.0,
+        spacing_days: 7,
         seed: 20260822,
         out: "dataset".into(),
         catalogue: "data/comcat/global_m40.csv".into(),
@@ -83,6 +85,7 @@ fn parse_args() -> Config {
             "--max-days" => c.max_days = val!().parse().unwrap(),
             "--scheme" => c.scheme = val!(),
             "--window-days" => c.window_days = val!().parse().unwrap(),
+            "--spacing-days" => c.spacing_days = val!().parse().unwrap(),
             "--seed" => c.seed = val!().parse().unwrap(),
             "--out" => c.out = val!(),
             "--catalogue" => c.catalogue = val!(),
@@ -145,6 +148,7 @@ fn main() -> rustspice_core::Result<()> {
         "dayoffset" => sampling::Scheme::DayOffset { max_days: cfg.max_days },
         "window" => sampling::Scheme::Window { window_days: cfg.window_days },
         "uniform" => sampling::Scheme::Uniform,
+        "timestratified" => sampling::Scheme::TimeStratified { spacing_days: cfg.spacing_days },
         other => panic!("unknown scheme {other}"),
     };
     let mut rng = sampling::Rng::seed(cfg.seed);

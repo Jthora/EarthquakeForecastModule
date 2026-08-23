@@ -38,6 +38,23 @@
 use crate::cells::Grid;
 use eqf::comcat::Quake;
 
+/// Civil date from days since 2000-01-01, by Howard Hinnant's algorithm.
+///
+/// Needed because the time-stratified scheme's referent window is a *calendar*
+/// month, which is what makes its exchangeability argument work.
+pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 730_425; // shift epoch to 0000-03-01
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as i64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
 /// How control times are drawn relative to their case.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Scheme {
@@ -47,6 +64,30 @@ pub enum Scheme {
     Window { window_days: f64 },
     /// Uniform across the whole study span.
     Uniform,
+    /// Time-stratified: every time in the case's own calendar month that differs
+    /// from it by a whole multiple of `spacing_days`.
+    ///
+    /// This is the only scheme here whose null is exactly right, and the reason is
+    /// worth stating. The others place the case at the centre of its controls: with
+    /// offsets of plus-or-minus k days the controls straddle the case, so for any
+    /// smoothly-varying feature the case sits near its own stratum's mean while a
+    /// control does not. The case is then identifiable from the feature values
+    /// alone, the rows are not exchangeable, and a permutation test that assumes
+    /// they are is mis-calibrated -- conservative here rather than anti-conservative,
+    /// but wrong either way. Measured on the real M4 catalogue, the observed z field
+    /// came out at sd 0.63 where the permutation null said 1.001 +/- 0.031.
+    ///
+    /// Here the referent set is fixed by the calendar, not by the case: it is every
+    /// day of that month congruent to the case modulo the spacing. Under a uniform
+    /// hazard the event is equally likely to have fallen on any of them, so the case
+    /// really is exchangeable with its controls and the permutation null is exact.
+    /// This is the standard time-stratified case-crossover referent scheme, adopted
+    /// precisely because the symmetric bidirectional design has the bias above.
+    ///
+    /// A spacing of 7 also holds day of week fixed, so the weekly cycle in cultural
+    /// noise -- and hence in detection threshold -- cannot masquerade as signal.
+    /// Control count varies between 3 and 4 depending on the month.
+    TimeStratified { spacing_days: u32 },
 }
 
 /// One row of the training set.
@@ -155,6 +196,47 @@ pub fn build(
             magnitude: q.magnitude,
         });
 
+        // The time-stratified referents are determined by the calendar rather than
+        // drawn, so they are enumerated rather than sampled.
+        if let Scheme::TimeStratified { spacing_days } = scheme {
+            let step = spacing_days.max(1) as f64;
+            let day_floor = q.day.floor();
+            let frac = q.day - day_floor;
+            let (y, m, _) = civil_from_days(day_floor as i64);
+            let mut k = 1i64;
+            // Walk outwards in both directions until the month is left behind.
+            let mut refs: Vec<f64> = Vec::new();
+            loop {
+                let mut any = false;
+                for sign in [-1.0, 1.0] {
+                    let t = day_floor + sign * k as f64 * step;
+                    let (ty, tm, _) = civil_from_days(t as i64);
+                    if ty == y && tm == m {
+                        any = true;
+                        if t >= span.0 && t <= span.1 {
+                            refs.push(t + frac);
+                        }
+                    }
+                }
+                if !any {
+                    break;
+                }
+                k += 1;
+            }
+            for t in refs {
+                out.push(Row {
+                    day: t,
+                    cell,
+                    lat_deg: lat,
+                    lon_deg: lon,
+                    case: false,
+                    stratum,
+                    magnitude: f64::NAN,
+                });
+            }
+            continue;
+        }
+
         let mut used: Vec<f64> = Vec::with_capacity(controls_per_case);
         for _ in 0..controls_per_case {
             // A few attempts, then give up on this control rather than loop forever
@@ -163,6 +245,7 @@ pub fn build(
             let mut placed = None;
             for _ in 0..32 {
                 let t = match scheme {
+                    Scheme::TimeStratified { .. } => unreachable!("handled above"),
                     Scheme::DayOffset { max_days } => {
                         let k = 1.0 + rng.below(max_days as u64) as f64;
                         let sign = if rng.next_u64() & 1 == 0 { -1.0 } else { 1.0 };
@@ -216,6 +299,108 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    #[test]
+    fn civil_dates_round_trip_against_known_values() {
+        assert_eq!(civil_from_days(0), (2000, 1, 1));
+        assert_eq!(civil_from_days(-1), (1999, 12, 31));
+        assert_eq!(civil_from_days(59), (2000, 2, 29));   // 2000 was a leap year
+        assert_eq!(civil_from_days(-8766), (1976, 1, 1));
+        assert_eq!(civil_from_days(9131), (2024, 12, 31));
+        assert_eq!(civil_from_days(9132), (2025, 1, 1));
+    }
+
+    #[test]
+    fn time_stratified_referents_share_the_month_and_the_weekday() {
+        let g = Grid::new(100.0);
+        let mut rng = Rng::seed(21);
+        let qs = sample_quakes(400, &mut rng);
+        let span = (-8766.0, 9132.0);
+        let rows = build(&qs, &g, Scheme::TimeStratified { spacing_days: 7 }, 0, span, &mut rng);
+
+        let mut case_day = 0.0;
+        let mut per_stratum = 0;
+        let mut counts = Vec::new();
+        for r in &rows {
+            if r.case {
+                if per_stratum > 0 {
+                    counts.push(per_stratum);
+                }
+                per_stratum = 0;
+                case_day = r.day;
+                continue;
+            }
+            per_stratum += 1;
+            let (cy, cm, _) = civil_from_days(case_day.floor() as i64);
+            let (ry, rm, _) = civil_from_days(r.day.floor() as i64);
+            assert_eq!((cy, cm), (ry, rm), "referent left the case's calendar month");
+            let d = (r.day - case_day).abs();
+            assert!((d / 7.0 - (d / 7.0).round()).abs() < 1e-9,
+                    "offset {d} is not a multiple of 7 days");
+            // Whole weeks, so both local solar time and day of week are held fixed.
+            assert!((d - d.round()).abs() < 1e-9);
+        }
+        counts.push(per_stratum);
+        assert!(counts.iter().all(|&c| (2..=4).contains(&c)),
+                "referent counts out of range: {:?}",
+                counts.iter().copied().collect::<std::collections::BTreeSet<_>>());
+    }
+
+    /// The property the whole scheme exists for.
+    ///
+    /// If the case is exchangeable with its referents then, under a uniform hazard,
+    /// its rank among the stratum's times must be uniform. The bidirectional design
+    /// fails this by construction: the case is always near the middle.
+    #[test]
+    fn the_case_is_exchangeable_with_its_referents() {
+        let g = Grid::new(100.0);
+        let span = (-8000.0, 9000.0);
+
+        let rank_spread = |scheme: Scheme| -> f64 {
+            let mut rng = Rng::seed(77);
+            let qs = sample_quakes(6000, &mut rng);
+            let rows = build(&qs, &g, scheme, 4, span, &mut rng);
+            let mut mid = 0usize;
+            let mut total = 0usize;
+            let mut i = 0;
+            while i < rows.len() {
+                let case = rows[i];
+                let mut times = vec![case.day];
+                let mut j = i + 1;
+                while j < rows.len() && !rows[j].case {
+                    times.push(rows[j].day);
+                    j += 1;
+                }
+                if times.len() >= 4 {
+                    let n = times.len();
+                    let rank = times.iter().filter(|&&t| t < case.day).count();
+                    // Is the case in the interior rather than at either extreme?
+                    if rank > 0 && rank < n - 1 {
+                        mid += 1;
+                    }
+                    total += 1;
+                }
+                i = j;
+            }
+            mid as f64 / total as f64
+        };
+
+        // With n times and a uniformly-placed case, the chance of landing in the
+        // interior is (n-2)/n: 0.5 at n = 4, 0.6 at n = 5.
+        let ts = rank_spread(Scheme::TimeStratified { spacing_days: 7 });
+        assert!(
+            (0.4..=0.7).contains(&ts),
+            "time-stratified case lands mid-stratum {ts:.3} of the time, expected ~0.5-0.6"
+        );
+
+        // The bidirectional design should visibly fail the same check.
+        let bd = rank_spread(Scheme::DayOffset { max_days: 5 });
+        assert!(
+            bd > ts + 0.1,
+            "expected the bidirectional design to centre the case ({bd:.3}) \
+             far more than the time-stratified one ({ts:.3})"
+        );
     }
 
     #[test]
